@@ -158,8 +158,10 @@
                     class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition" title="Save JSON"><i
                         class="fa-solid fa-download"></i></button>
                 <button onclick="document.getElementById('file-input').click()"
-                    class="px-3 py-1 hover:bg-gray-600 transition" title="Load JSON"><i
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition" title="Load JSON"><i
                         class="fa-solid fa-upload"></i></button>
+                <button class="px-3 py-1 hover:bg-gray-600 transition opacity-50 cursor-not-allowed"
+                    title="Import from Google Maps (Coming Soon)"><i class="fa-solid fa-map-location-dot"></i></button>
                 <input type="file" id="file-input" hidden accept=".json" onchange="app.loadProject(this)">
             </div>
 
@@ -427,6 +429,14 @@
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-100 text-green-900">
                             <div class="font-bold text-[10px]">Grid Point</div>
                         </div>
+                        <div onclick="app.setTool('meter_gross')" id="tool-meter_gross"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-50 text-green-800">
+                            <div class="font-bold text-[10px]">Gross Meter</div>
+                        </div>
+                        <div onclick="app.setTool('meter_gross')" id="tool-meter_gross"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-50 text-green-800">
+                            <div class="font-bold text-[10px]">Gross Meter</div>
+                        </div>
                         <div onclick="app.setTool('battery_5kw')" id="tool-battery_5kw"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-50 text-green-900">
                             <div class="font-bold text-[10px]">Battery 5kWh</div>
@@ -494,6 +504,45 @@
                         <span>0° (Up)</span><span id="orient-disp">0°</span><span>360°</span>
                     </div>
                 </div>
+
+                <!-- Playback Controls -->
+                <div class="mt-3 pt-2 border-t border-gray-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] text-gray-400 uppercase font-bold">Simulation</span>
+                        <button onclick="app.resetSimulation()" class="text-[10px] text-blue-400 hover:text-blue-300"><i
+                                class="fa-solid fa-rotate-right"></i> Reset</button>
+                    </div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <select id="sim-month" onchange="app.setSimMonth(this.value)"
+                            class="bg-gray-800 text-gray-300 text-[10px] border border-gray-600 rounded px-1 py-0.5 w-16">
+                            <option value="0">Jan</option>
+                            <option value="1">Feb</option>
+                            <option value="2">Mar</option>
+                            <option value="3">Apr</option>
+                            <option value="4">May</option>
+                            <option value="5">Jun</option>
+                            <option value="6">Jul</option>
+                            <option value="7">Aug</option>
+                            <option value="8">Sep</option>
+                            <option value="9">Oct</option>
+                            <option value="10">Nov</option>
+                            <option value="11">Dec</option>
+                        </select>
+                        <div class="text-xs font-mono text-yellow-400 flex-1 text-right" id="sim-power">0 kW</div>
+                    </div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <button onclick="app.togglePlayback()" id="btn-play"
+                            class="bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 text-xs w-8 transition"><i
+                                class="fa-solid fa-play"></i></button>
+                        <input type="range" min="1" max="100" value="10"
+                            class="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                            oninput="app.setSpeed(this.value)" title="Speed">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[9px] text-gray-400">
+                        <div>Day: <span id="sim-day-gen" class="text-white">0</span> kWh</div>
+                        <div>Total: <span id="sim-total-gen" class="text-white">0</span> MWh</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Right Details Panel -->
@@ -533,6 +582,22 @@
                 </div>
                 <div class="flex items-center gap-2 mb-1">
                     <div class="w-3 h-3 bg-black/30 border border-black"></div> Shadow (Roof)
+                </div>
+
+                <!-- Playback Controls -->
+                <div class="mt-3 pt-3 border-t border-gray-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] text-gray-400 uppercase font-bold">Simulation</span>
+                        <div class="text-xs font-mono text-yellow-400" id="sim-power">0 kW</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="app.togglePlayback()" id="btn-play"
+                            class="bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 text-xs w-8 transition"><i
+                                class="fa-solid fa-play"></i></button>
+                        <input type="range" min="1" max="100" value="10"
+                            class="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                            oninput="app.setSpeed(this.value)" title="Speed">
+                    </div>
                 </div>
             </div>
         </div>
@@ -589,6 +654,16 @@
                     class="hover:text-gray-300 transition"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 overflow-y-auto grid grid-cols-4 gap-6">
+
+                <!-- Commercial Option -->
+                <div class="col-span-4 bg-blue-50 p-3 rounded border border-blue-100 flex items-center gap-3">
+                    <input type="checkbox" id="check-commercial" class="w-4 h-4 text-blue-600 rounded cursor-pointer">
+                    <div>
+                        <div class="text-sm font-bold text-blue-900">Commercial / Industrial Project</div>
+                        <div class="text-xs text-blue-700">Apply Accelerated Depreciation (40%) benefit in financial
+                            analysis.</div>
+                    </div>
+                </div>
 
                 <!-- Left: Score & Stats -->
                 <div class="col-span-1 space-y-4">
@@ -702,7 +777,9 @@
             'load_box': { type: 'load', w: 1.0, h: 1.0, cost: 0, color: '#f59e0b', h_z: 0, label: 'Load', units: 500 },
             'meter_net': { type: 'bos', subtype: 'meter_net', w: 0.4, h: 0.4, cost: 15000, color: '#10b981', h_z: 1.2, label: 'Net Meter' },
             'meter_gross': { type: 'bos', subtype: 'meter_gross', w: 0.4, h: 0.4, cost: 15000, color: '#ef4444', h_z: 1.2, label: 'Gross Meter' },
-            'grid_point': { type: 'grid', w: 0.6, h: 0.6, cost: 0, color: '#22c55e', h_z: 0, label: 'Grid Point' },
+            'meter_net': { type: 'grid', subtype: 'meter_net', w: 0.4, h: 0.5, cost: 8000, color: '#10b981', h_z: 0.5 },
+            'meter_gross': { type: 'grid', subtype: 'meter_gross', w: 0.4, h: 0.5, cost: 5000, color: '#22c55e', h_z: 0.5 },
+            'grid_point': { type: 'grid', subtype: 'pole', w: 0.5, h: 0.5, cost: 0, color: '#ffffff', h_z: 0 },
             'battery_5kw': { type: 'battery', w: 0.8, h: 1.2, capKwh: 5, cost: 120000, color: '#22c55e', h_z: 1 },
             'acdb': { type: 'bos', subtype: 'acdb', w: 0.6, h: 0.8, cost: 12000, color: '#374151', h_z: 1 },
             'trans_11kv': { type: 'bos', subtype: 'transformer', w: 1.5, h: 1.5, cost: 450000, color: '#ca8a04', voltage: '11kV', h_z: 2 },
@@ -724,6 +801,10 @@
                 this.wireStartObj = null; this.arrayStart = null;
                 this.cableMode = 'straight'; this.showGrid = true; this.orientation = 0;
                 this.calculatedCost = 0;
+                this.playbackSpeed = 10; this.isPlaying = false; this.lastFrameTime = 0;
+                this.simMonth = 5; // June default
+                this.simDayGen = 0; this.simTotalGen = 0;
+                this.simTotalImport = 0; this.simTotalExport = 0;
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 this.keyHandler = (e) => {
@@ -773,6 +854,202 @@
                     document.body.classList.add('bg-[#f5f0e6]', 'text-[#422006]', 'sepia'); document.body.classList.remove('bg-gray-900', 'text-gray-100', 'bg-gray-100', 'text-gray-900');
                 }
                 this.loop();
+            }
+
+            togglePlayback() {
+                this.isPlaying = !this.isPlaying;
+                const btn = document.getElementById('btn-play');
+                btn.innerHTML = this.isPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+                if (this.isPlaying) {
+                    this.lastFrameTime = performance.now();
+                    requestAnimationFrame(this.updatePlayback.bind(this));
+                }
+            }
+
+            setSpeed(val) { this.playbackSpeed = parseInt(val); }
+            setSimMonth(val) { this.simMonth = parseInt(val); }
+            resetSimulation() {
+                this.isPlaying = false;
+                document.getElementById('btn-play').innerHTML = '<i class="fa-solid fa-play"></i>';
+                this.sunTime = 6; this.setSunTime(6);
+                this.simDayGen = 0; this.simTotalGen = 0;
+                this.simTotalImport = 0; this.simTotalExport = 0;
+                document.getElementById('sim-day-gen').innerText = "0";
+                document.getElementById('sim-total-gen').innerText = "0";
+                document.getElementById('sim-power').innerText = "0 kW";
+                this.updateUI(); // Reset meter readings in UI
+            }
+
+            updatePlayback(timestamp) {
+                if (!this.isPlaying) return;
+                const dt = (timestamp - this.lastFrameTime) / 1000;
+                this.lastFrameTime = timestamp;
+
+                // Speed factor: 10 = 1 hour per second roughly
+                const dt_hours = (this.playbackSpeed / 10) * dt;
+                this.sunTime += dt_hours;
+
+                if (this.sunTime >= 18) {
+                    this.sunTime = 6; // Loop 6 AM to 6 PM
+                    this.simDayGen = 0; // Reset day counter on new day
+                }
+
+                this.setSunTime(this.sunTime);
+
+                // Calculate Instant Power & Energy
+                const declination = -23.45 * Math.cos((360 / 365) * (this.simMonth * 30 + 10) * Math.PI / 180);
+                // Adjust elevation based on month (simplified)
+                // Max elevation at noon = 90 - Latitude + Declination. Assume Lat 28 (Delhi).
+                // Max El = 90 - 28 + Dec.
+                // Current simple model: sin((t-6)/12 * PI). This peaks at 1.
+                // Let's scale it.
+                const maxEl = Math.sin(((90 - 28 + declination) * Math.PI) / 180);
+                const timeFactor = Math.sin(((this.sunTime - 6) / 12) * Math.PI);
+                const elevation = timeFactor * maxEl; // Rough approximation
+
+                if (elevation > 0) {
+                    const panels = this.objects.filter(o => o.type === 'panel');
+                    const totalCap = panels.reduce((sum, p) => sum + p.watts, 0) / 1000;
+
+                    // Shadow Loss (Instant)
+                    // We need to pass the current sun vector which is updated by setSunTime
+                    // But calculateShadowLoss uses this.getShadowVector() which uses this.sunTime.
+                    // So it should be fine.
+                    const shadowLoss = this.calculateShadowLoss();
+
+                    const instantPower = totalCap * elevation * (1 - shadowLoss) * 4.5; // Scaling to match peak ~4.5 units/kW/day
+                    // Actually, let's keep it simple: Power = Cap * Factor.
+                    // If 1kW panel, peak sun, it gives ~0.8-0.9kW output.
+                    const powerOutput = totalCap * elevation * (1 - shadowLoss);
+
+                    document.getElementById('sim-power').innerText = powerOutput.toFixed(2) + " kW";
+
+                    // Energy Accumulation
+                    const gen_kWh = powerOutput * dt_hours;
+                    this.simDayGen += gen_kWh;
+                    this.simTotalGen += gen_kWh; // MWh display logic in UI
+
+                    // Load Logic
+                    const baseLoad = parseFloat(document.getElementById('input-load').value) || 500;
+                    const loadBoxes = this.objects.filter(o => o.type === 'load');
+                    const boxLoad = loadBoxes.reduce((sum, b) => sum + (b.units || 500), 0);
+                    const totalMonthlyLoad = baseLoad + boxLoad;
+                    const hourlyLoad = totalMonthlyLoad / 30 / 24; // Avg hourly load
+                    const load_kWh = hourlyLoad * dt_hours;
+
+                    // Net Meter Logic
+                    if (powerOutput > hourlyLoad) {
+                        this.simTotalExport += (powerOutput - hourlyLoad) * dt_hours;
+                    } else {
+                        this.simTotalImport += (hourlyLoad - powerOutput) * dt_hours;
+                    }
+
+                    // Update UI Counters
+                    document.getElementById('sim-day-gen').innerText = this.simDayGen.toFixed(1);
+                    document.getElementById('sim-total-gen').innerText = (this.simTotalGen / 1000).toFixed(3);
+
+                    // Update Right Panel if Meter Selected
+                    if (this.selectedObjectId) {
+                        const obj = this.objects.find(o => o.id === this.selectedObjectId);
+                        if (obj && (obj.subtype === 'meter_net' || obj.subtype === 'meter_gross')) {
+                            this.updateUI(); // Refresh to show new readings
+                        }
+                    }
+                } else {
+                    document.getElementById('sim-power').innerText = "0 kW";
+                }
+
+                this.loop();
+                requestAnimationFrame(this.updatePlayback.bind(this));
+            }
+
+            calculateYearlyShadowLoss() {
+                // Sample 12 months, 7 AM to 5 PM, every hour
+                const panels = this.objects.filter(o => o.type === 'panel');
+                if (panels.length === 0) return 0;
+
+                let totalPotential = 0;
+                let totalLoss = 0;
+
+                // Save current state
+                const savedTime = this.sunTime;
+
+                for (let m = 0; m < 12; m++) {
+                    // Approximate sun path shift for seasons (simplified)
+                    // In reality, declination changes. Here we simulate by shifting "effective" time or angle?
+                    // For MVP, we'll keep the path same but vary intensity/length? 
+                    // Actually, let's just use the current path but sample across the day.
+                    // To do it properly, we need declination.
+                    // Let's implement a simplified declination shift.
+                    const declination = -23.45 * Math.cos((360 / 365) * (m + 10) * Math.PI / 180);
+                    // This affects elevation. 
+
+                    for (let h = 7; h <= 17; h += 1) {
+                        this.sunTime = h;
+                        // Recalculate shadow vector with declination effect (simplified: just modify elevation slightly)
+                        // Ideally we update getShadowVector to take declination. 
+                        // For now, let's just use the standard path as "Equinox" and maybe vary length?
+                        // Let's stick to the standard path for now to ensure stability, but sample hourly.
+
+                        const v = this.getShadowVector();
+                        if (!v) continue;
+
+                        const elevation = Math.sin(((h - 6) / 12) * Math.PI);
+                        const potential = panels.reduce((sum, p) => sum + p.watts, 0) * elevation;
+
+                        // Calculate shadow coverage
+                        panels.forEach(p => {
+                            let shadedPoints = 0;
+                            const points = [
+                                { x: p.x + 0.1, y: p.y + 0.1 }, // tl (inset slightly)
+                                { x: p.x + p.w - 0.1, y: p.y + 0.1 }, // tr
+                                { x: p.x + 0.1, y: p.y + p.h - 0.1 }, // bl
+                                { x: p.x + p.w - 0.1, y: p.y + p.h - 0.1 }, // br
+                                { x: p.x + p.w / 2, y: p.y + p.h / 2 } // center
+                            ];
+
+                            points.forEach(pt => {
+                                const isShaded = this.objects.some(o => {
+                                    if (o.id === p.id) return false;
+                                    if (o.h_z <= p.h_z) return false; // Only higher objects cast shadow
+
+                                    const dx = v.x * (o.h_z - p.h_z);
+                                    const dy = v.y * (o.h_z - p.h_z);
+                                    const sx = o.x + dx; const sy = o.y + dy;
+
+                                    // Check shifted rect
+                                    return (pt.x >= sx && pt.x <= sx + o.w && pt.y >= sy && pt.y <= sy + o.h);
+                                });
+                                if (isShaded) shadedPoints++;
+                            });
+
+                            const coverage = shadedPoints / 5;
+                            const loss = coverage * potential;
+                            totalPotential += potential;
+                            totalLoss += loss;
+                        });
+                    }
+                }
+
+                this.sunTime = savedTime; // Restore
+                return totalPotential > 0 ? (totalLoss / totalPotential) : 0;
+            }
+
+            isPointInShadow(px, py, ph, v) {
+                return this.objects.some(o => {
+                    if (o.h_z <= ph) return false;
+                    const dx = v.x * (o.h_z - ph);
+                    const dy = v.y * (o.h_z - ph);
+                    // Check if point (px, py) is inside the shadow cast by o
+                    // Shadow is a parallelogram formed by o and o+d
+                    // Simple check: project point back by -d, see if it falls in o
+                    // Back projection: 
+                    // If point P is in shadow, then P - k*d must be in O for some 0 < k < 1?
+                    // Actually, simpler: The shadow of O at height ph is O shifted by d.
+                    // So we check if P is inside rectangle O shifted by d.
+                    const sx = o.x + dx; const sy = o.y + dy;
+                    return (px >= sx && px <= sx + o.w && py >= sy && py <= sy + o.h);
+                });
             }
 
             // --- CUSTOM COMPONENT ---
@@ -947,7 +1224,22 @@
                                         <input type="number" value="${obj.h.toFixed(2)}" class="w-full border rounded p-1 text-sm bg-gray-50" disabled>
                                     </div>
                                 </div>
-
+                        `;
+                            if (obj.subtype === 'meter_gross') {
+                                details += `<div class="mb-2 p-2 bg-green-50 rounded border border-green-200">
+                        <div class="text-[10px] font-bold text-green-800 uppercase mb-1">Solar Generation</div>
+                        <div class="text-lg font-mono text-green-600">${(this.simTotalGen || 0).toFixed(2)} kWh</div>
+                    </div>`;
+                            }
+                            if (obj.subtype === 'meter_net') {
+                                const net = (this.simTotalExport || 0) - (this.simTotalImport || 0);
+                                details += `<div class="mb-2 p-2 bg-blue-50 rounded border border-blue-200 space-y-2">
+                        <div><div class="text-[10px] font-bold text-blue-800 uppercase">Import (Grid to Home)</div><div class="font-mono text-red-600">${(this.simTotalImport || 0).toFixed(2)} kWh</div></div>
+                        <div><div class="text-[10px] font-bold text-blue-800 uppercase">Export (Solar to Grid)</div><div class="font-mono text-green-600">${(this.simTotalExport || 0).toFixed(2)} kWh</div></div>
+                        <div class="border-t border-blue-200 pt-1"><div class="text-[10px] font-bold text-blue-800 uppercase">Net Reading</div><div class="font-mono ${net >= 0 ? 'text-green-600' : 'text-red-600'}">${net.toFixed(2)} kWh</div></div>
+                    </div>`;
+                            }
+                            details += `
                                 <div>
                                     <div class="flex justify-between">
                                         <label class="text-[10px] text-gray-500 uppercase font-bold">Elevation (Z)</label>
@@ -1351,8 +1643,12 @@
                 const tableBodyRef = document.getElementById('month-table-body') || document.getElementById('year-table-body'); // Fallback
                 if (tableBodyRef) tableBodyRef.innerHTML = '';
 
-                const shadowLossPct = this.calculateShadowLoss();
+                // Use new Yearly Shadow Analysis
+                const shadowLossPct = this.calculateYearlyShadowLoss();
                 const shadowLossFactor = 1 - shadowLossPct;
+
+                // Check Commercial
+                const isCommercial = document.getElementById('check-commercial').checked;
 
                 let totalGen = 0;
                 const monthlyGenData = [];
@@ -1392,7 +1688,15 @@
                     for (let y = 1; y <= 25; y++) {
                         const degradation = Math.pow(0.995, y - 1);
                         const yearGen = totalGen * degradation;
-                        const yearSavings = yearGen * rate;
+                        let yearSavings = yearGen * rate;
+
+                        // Accelerated Depreciation (AD) Benefit in Year 1
+                        if (y === 1 && isCommercial) {
+                            // Assuming 40% AD, 30% Tax Bracket -> Benefit = Cost * 0.40 * 0.30
+                            const adBenefit = systemCost * 0.40 * 0.30;
+                            yearSavings += adBenefit;
+                        }
+
                         cumulativeSavings += yearSavings;
                         const roiStatus = (!roiReached && cumulativeSavings >= systemCost) ? `<span class="text-green-600 font-bold">Break Even</span>` : (cumulativeSavings >= systemCost ? 'Profitable' : 'Recovering');
                         if (!roiReached && cumulativeSavings >= systemCost) roiReached = true;
