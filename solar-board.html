@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Architect: Grid Master v4.5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            touch-action: none;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            cursor: crosshair;
+        }
+
+        .sidebar-item {
+            transition: all 0.2s;
+        }
+
+        .sidebar-item:active {
+            transform: scale(0.95);
+        }
+
+        .sidebar-item.selected {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+            box-shadow: inset 0 0 0 1px #3b82f6;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #fbbf24;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #4b5563;
+            border-radius: 2px;
+        }
+
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #height-slider::-webkit-slider-thumb {
+            background: #3b82f6;
+        }
+
+        .unit-input {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            padding: 2px 4px;
+            border-radius: 4px;
+            width: 70px;
+            text-align: right;
+            font-family: monospace;
+            color: #1e3a8a;
+            font-size: 12px;
+        }
+
+        .layer-item {
+            font-size: 11px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+        }
+
+        .layer-item:hover {
+            background-color: #f9fafb;
+        }
+
+        .layer-item.active {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 h-screen w-screen flex flex-col text-gray-100 font-sans">
+
+    <!-- Top Bar -->
+    <div
+        class="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0 z-20 shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="bg-yellow-500 p-1.5 rounded text-gray-900"><i class="fa-solid fa-solar-panel text-lg"></i></div>
+            <div>
+                <h1 class="font-bold text-lg leading-none">Solar Architect</h1>
+                <div class="text-xs text-gray-400">Grid Master v4.5</div>
+            </div>
+        </div>
+
+        <div class="flex gap-6 text-sm font-mono bg-gray-900/50 px-4 py-1 rounded-lg border border-gray-700">
+            <div class="flex flex-col items-center w-24"><span
+                    class="text-gray-500 text-[10px] uppercase tracking-wider">DC Capacity</span><span id="stat-dc-cap"
+                    class="text-yellow-400 font-bold">0 kWp</span></div>
+            <div class="w-px bg-gray-700 h-8"></div>
+            <div class="flex flex-col items-center w-24"><span
+                    class="text-gray-500 text-[10px] uppercase tracking-wider">AC Output</span><span id="stat-ac-cap"
+                    class="text-blue-400 font-bold">0 kW</span></div>
+            <div class="w-px bg-gray-700 h-8"></div>
+            <div class="flex flex-col items-center w-24"><span
+                    class="text-gray-500 text-[10px] uppercase tracking-wider">Est. Cost</span><span id="stat-cost"
+                    class="text-green-400 font-bold">₹0</span></div>
+        </div>
+
+        <div class="flex gap-3 items-center">
+            <div class="flex items-center gap-2 mr-2">
+                <button onclick="app.toggleGrid()" id="btn-grid-toggle"
+                    class="text-xs bg-blue-600 px-2 py-1 rounded text-white border border-gray-600 hover:bg-blue-500 flex items-center gap-2"><i
+                        class="fa-solid fa-border-all"></i> Grid</button>
+                <button onclick="app.toggleCableMode()" id="btn-cable-mode"
+                    class="text-xs bg-gray-700 px-2 py-1 rounded text-white border border-gray-600 hover:bg-gray-600 flex items-center gap-2"><i
+                        class="fa-solid fa-bezier-curve"></i> Straight</button>
+            </div>
+
+            <div class="flex bg-gray-700 rounded border border-gray-600 mr-2">
+                <button onclick="app.saveProject()"
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition" title="Save JSON"><i
+                        class="fa-solid fa-download"></i></button>
+                <button onclick="document.getElementById('file-input').click()"
+                    class="px-3 py-1 hover:bg-gray-600 transition" title="Load JSON"><i
+                        class="fa-solid fa-upload"></i></button>
+                <input type="file" id="file-input" hidden accept=".json" onchange="app.loadProject(this)">
+            </div>
+
+            <div class="flex bg-gray-700 rounded border border-gray-600 mr-2">
+                <button onclick="app.rotateSelection()"
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white"
+                    title="Rotate (R)"><i class="fa-solid fa-rotate"></i></button>
+                <button id="btn-copy" onclick="app.copy()"
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition" title="Copy (Ctrl+C)"><i
+                        class="fa-regular fa-copy"></i></button>
+                <button id="btn-paste" onclick="app.paste()" class="px-3 py-1 hover:bg-gray-600 transition"
+                    title="Paste (Ctrl+V)"><i class="fa-regular fa-paste"></i></button>
+            </div>
+            <div class="flex bg-gray-700 rounded border border-gray-600 mr-2">
+                <button id="btn-undo" onclick="app.undo()"
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition disabled:opacity-30"><i
+                        class="fa-solid fa-rotate-left"></i></button>
+                <button id="btn-redo" onclick="app.redo()"
+                    class="px-3 py-1 hover:bg-gray-600 transition disabled:opacity-30"><i
+                        class="fa-solid fa-rotate-right"></i></button>
+            </div>
+            <button onclick="app.resetMap()"
+                class="bg-gray-700 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition border border-gray-600"><i
+                    class="fa-solid fa-trash"></i> Clear</button>
+            <button onclick="app.runSimulation()"
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded text-sm font-bold shadow-lg shadow-green-900/50 transition flex items-center gap-2 border border-green-500"><i
+                    class="fa-solid fa-play"></i> Evaluate</button>
+        </div>
+    </div>
+    <!-- Shortcuts Bar -->
+    <div
+        class="bg-gray-800 border-b border-gray-700 px-4 py-1 flex gap-4 text-[10px] text-gray-400 font-mono overflow-x-auto whitespace-nowrap shrink-0">
+        <span class="font-bold text-gray-500 uppercase">Shortcuts:</span>
+        <span><span class="text-yellow-500">[V]</span> Select</span>
+        <span><span class="text-yellow-500">[M]</span> Measure</span>
+        <span><span class="text-yellow-500">[D]</span> Delete</span>
+        <span><span class="text-yellow-500">[W]</span> DC Wire</span>
+        <span><span class="text-yellow-500">[A]</span> AC Wire</span>
+        <span><span class="text-yellow-500">[G]</span> Earthing</span>
+        <span><span class="text-yellow-500">[R]</span> Rotate</span>
+        <span><span class="text-yellow-500">[Ctrl+S]</span> Save</span>
+        <span><span class="text-yellow-500">[Del]</span> Remove Item</span>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden relative">
+        <!-- Sidebar -->
+        <div class="w-80 bg-white text-gray-800 flex flex-col border-r border-gray-700 shrink-0 z-10 overflow-y-auto pb-20 shadow-xl"
+            id="sidebar">
+
+            <!-- Scenario & Load -->
+            <div class="p-3 border-b border-gray-200 bg-gray-50 space-y-2">
+                <div>
+                    <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Project Scenario</label>
+                    <select id="scenario-select" onchange="app.loadScenario(this.value)"
+                        class="w-full mt-1 p-1.5 border border-gray-300 rounded bg-white text-sm focus:outline-none focus:border-blue-500">
+                        <option value="blank">Blank Canvas (Custom)</option>
+                        <option value="residential">Residential Rooftop</option>
+                        <option value="commercial">Commercial Ground Mount</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Financials -->
+            <div class="p-3 border-b border-gray-200 bg-green-50 space-y-2">
+                <label class="text-[10px] font-bold text-green-800 uppercase tracking-wider">Financials (INR)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Grid Rate (₹/Unit)</label>
+                        <input type="number" id="input-rate" value="8.50" step="0.1"
+                            class="w-full mt-1 p-1 border rounded text-xs">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Load (Units/Mo)</label>
+                        <input type="number" id="input-load" value="500" class="w-full mt-1 p-1 border rounded text-xs">
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Plant Cost (₹)</label>
+                        <span class="text-[9px] text-gray-400 cursor-pointer underline"
+                            onclick="app.resetCost()">Auto</span>
+                    </div>
+                    <input type="number" id="input-plant-cost"
+                        class="w-full mt-1 p-1 border rounded text-xs font-bold text-green-700"
+                        placeholder="Auto Calculated">
+                </div>
+            </div>
+
+            <!-- Layers -->
+            <div class="flex-1 flex flex-col min-h-[150px] max-h-[200px] border-b border-gray-200">
+                <div class="p-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                    <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Layers</label>
+                    <div class="flex gap-1">
+                        <button onclick="app.groupSelected()"
+                            class="text-[9px] bg-gray-200 hover:bg-gray-300 px-1.5 py-0.5 rounded border border-gray-300"
+                            title="Group Selected"><i class="fa-solid fa-link"></i> Group</button>
+                        <button onclick="app.ungroupSelected()"
+                            class="text-[9px] bg-gray-200 hover:bg-gray-300 px-1.5 py-0.5 rounded border border-gray-300"
+                            title="Ungroup Selected"><i class="fa-solid fa-link-slash"></i></button>
+                    </div>
+                </div>
+                <div id="layers-list" class="flex-1 overflow-y-auto bg-white"></div>
+            </div>
+
+            <!-- Properties -->
+            <div class="p-3 border-b border-gray-200 bg-blue-50" id="props-panel">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Properties</label>
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between">
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Height (Z)</label>
+                        <span class="text-[9px] text-blue-600 font-bold" id="base-h-display">On Ground (0m)</span>
+                    </div>
+                    <div class="flex gap-2 items-center mt-1">
+                        <input type="number" id="input-h-m" class="unit-input" placeholder="0"
+                            onchange="app.setHeightFromInput(this.value, 'm')"> <span
+                            class="text-xs text-gray-500">m</span>
+                        <input type="number" id="input-h-ft" class="unit-input" placeholder="0"
+                            onchange="app.setHeightFromInput(this.value, 'ft')"> <span
+                            class="text-xs text-gray-500">ft</span>
+                    </div>
+                    <input type="range" min="0" max="50" step="0.1" value="0" id="height-slider"
+                        oninput="app.setHeight(this.value)" class="w-full mt-1">
+                </div>
+                <div id="fill-actions" class="hidden mt-3 border-t border-blue-200 pt-2">
+                    <label class="text-[10px] font-bold text-blue-800 uppercase">Auto-Fill</label>
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <button onclick="app.fillSelection('panel_585')"
+                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded">Fill
+                            585W</button>
+                        <button onclick="app.fillSelection('panel_730')"
+                            class="bg-blue-800 hover:bg-blue-900 text-white text-xs py-1 px-2 rounded">Fill
+                            730W</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools -->
+            <div class="flex flex-col p-2 space-y-4">
+
+                <!-- Basic Tools -->
+                <div>
+                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1 mb-1">Main Tools</div>
+                    <div class="grid grid-cols-3 gap-1">
+                        <button onclick="app.setMode('select')" id="btn-select"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex flex-col items-center gap-1 text-[10px] font-medium selected">
+                            <i class="fa-solid fa-arrow-pointer text-base text-gray-600"></i> Select
+                        </button>
+                        <button onclick="app.setMode('measure')" id="btn-measure"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex flex-col items-center gap-1 text-[10px] font-medium">
+                            <i class="fa-solid fa-ruler-combined text-base text-blue-600"></i> Measure
+                        </button>
+                        <button onclick="app.setMode('delete')" id="btn-delete"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex flex-col items-center gap-1 text-[10px] font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200">
+                            <i class="fa-solid fa-eraser text-base"></i> Delete
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1 mt-1">
+                        <button onclick="app.setMode('wire_dc')" id="btn-wire_dc"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex flex-col items-center gap-1 text-[10px] font-medium">
+                            <i class="fa-solid fa-bezier-curve text-base text-red-500"></i> DC Wire
+                        </button>
+                        <button onclick="app.setMode('wire_ac')" id="btn-wire_ac"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex flex-col items-center gap-1 text-[10px] font-medium">
+                            <i class="fa-solid fa-bolt text-base text-yellow-500"></i> AC Wire
+                        </button>
+                        <button onclick="app.setMode('earthing')" id="btn-earthing"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex flex-col items-center gap-1 text-[10px] font-medium">
+                            <i class="fa-solid fa-leaf text-base text-green-600"></i> Earthing
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PV Modules -->
+                <div>
+                    <div class="flex justify-between items-center px-1 mb-1">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PV Modules</span>
+                        <button onclick="app.openCreateModal('panel')"
+                            class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200"><i
+                                class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <div class="space-y-1" id="tools-panel-list">
+                        <div onclick="app.setTool('panel_585')" id="tool-panel_585"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3">
+                            <div class="w-6 h-10 bg-blue-900 border border-blue-400 relative shrink-0"></div>
+                            <div>
+                                <div class="font-bold text-sm">585W Mono</div>
+                                <div class="text-[10px] text-gray-500">2.3m x 1.1m • ₹16000</div>
+                            </div>
+                        </div>
+                        <div onclick="app.setTool('panel_730')" id="tool-panel_730"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3">
+                            <div class="w-8 h-12 bg-blue-950 border border-blue-500 relative shrink-0"></div>
+                            <div>
+                                <div class="font-bold text-sm">730W Bifacial</div>
+                                <div class="text-[10px] text-gray-500">2.4m x 1.3m • ₹22000</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Electrical -->
+                <div>
+                    <div class="flex justify-between items-center px-1 mb-1">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Electrical &
+                            Grid</span>
+                        <button onclick="app.openCreateModal('inverter')"
+                            class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200"><i
+                                class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1" id="tools-elec-list">
+                        <div onclick="app.setTool('inv_string_10')" id="tool-inv_string_10"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">10kW String</div>
+                        </div>
+                        <div onclick="app.setTool('inv_hybrid_5')" id="tool-inv_hybrid_5"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">5kW Hybrid</div>
+                        </div>
+                        <div onclick="app.setTool('lt_panel')" id="tool-lt_panel"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-gray-100">
+                            <div class="font-bold text-[10px]">LT Panel</div>
+                        </div>
+                        <div onclick="app.setTool('ht_panel')" id="tool-ht_panel"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-gray-200">
+                            <div class="font-bold text-[10px]">HT Panel</div>
+                        </div>
+                        <div onclick="app.setTool('meter_net')" id="tool-meter_net"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-50 text-green-800">
+                            <div class="font-bold text-[10px]">Net Meter</div>
+                        </div>
+                        <div onclick="app.setTool('grid_point')" id="tool-grid_point"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-100 text-green-900">
+                            <div class="font-bold text-[10px]">Grid Point</div>
+                        </div>
+                        <div onclick="app.setTool('battery_5kw')" id="tool-battery_5kw"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-50 text-green-900">
+                            <div class="font-bold text-[10px]">Battery 5kWh</div>
+                        </div>
+                        <div onclick="app.setTool('trans_11kv')" id="tool-trans_11kv"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-yellow-50">
+                            <div class="font-bold text-[10px]">11kV Transf.</div>
+                        </div>
+                        <div onclick="app.setTool('earth_pit')" id="tool-earth_pit"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">Earth Pit</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Environment -->
+                <div>
+                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1 mb-1">Structures</div>
+                    <div class="grid grid-cols-2 gap-1">
+                        <button onclick="app.setDrawMode('roof')" id="btn-draw_roof"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex items-center gap-2 text-xs text-left">
+                            <div class="w-3 h-3 bg-gray-600 rounded-sm"></div> RCC Roof
+                        </button>
+                        <button onclick="app.setDrawMode('tinshed')" id="btn-draw_tinshed"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex items-center gap-2 text-xs text-left">
+                            <div class="w-3 h-3 bg-blue-200 rounded-sm"></div> Tin Shed
+                        </button>
+                        <button onclick="app.setDrawMode('building')" id="btn-draw_building"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex items-center gap-2 text-xs text-left">
+                            <div class="w-3 h-3 bg-gray-400 rounded-sm"></div> Building
+                        </button>
+                        <button onclick="app.setDrawMode('tree')" id="btn-draw_tree"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex items-center gap-2 text-xs text-left">
+                            <div class="w-3 h-3 bg-green-500 rounded-full"></div> Tree Area
+                        </button>
+                        <button onclick="app.setDrawMode('obstacle')" id="btn-draw_obstacle"
+                            class="sidebar-item p-2 rounded border border-gray-200 flex items-center gap-2 text-xs text-left col-span-2">
+                            <div class="w-3 h-3 bg-red-400 rounded-sm"></div> Chimney / Obstruction
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Area -->
+        <div class="flex-1 bg-gray-800 relative overflow-hidden" id="canvas-container">
+            <canvas id="gameCanvas" class="absolute top-0 left-0"></canvas>
+            <div
+                class="absolute top-4 right-4 bg-gray-900/90 p-3 rounded-lg border border-gray-600 w-52 backdrop-blur-sm z-10">
+                <div class="flex justify-between items-center text-xs text-gray-300 mb-2 font-bold uppercase">
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-sun text-yellow-500 text-lg"></i> Sun
+                        Position</span>
+                    <span id="time-display" class="font-mono text-yellow-400">12:00 PM</span>
+                </div>
+                <input type="range" min="6" max="18" step="0.1" value="12" id="sun-slider"
+                    oninput="app.setSunTime(this.value)">
+                <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                    <span>Sunrise</span><span>Noon</span><span>Sunset</span>
+                </div>
+
+                <div class="border-t border-gray-700 mt-3 pt-2">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase">Orientation (North)</label>
+                    <input type="range" min="0" max="360" value="0" class="w-full mt-1"
+                        oninput="app.setOrientation(this.value)">
+                    <div class="flex justify-between text-[9px] text-gray-500">
+                        <span>0° (Up)</span>
+                        <span id="orient-disp">0°</span>
+                        <span>360°</span>
+                    </div>
+                </div>
+            </div>
+            <div
+                class="absolute bottom-4 right-4 bg-gray-900/80 p-3 rounded text-xs text-gray-300 border border-gray-700 select-none pointer-events-none">
+                <div class="flex items-center gap-2 mb-2 border-b border-gray-700 pb-2">
+                    <div class="w-8 h-8 relative border-2 border-gray-500 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-500"
+                        id="compass-icon" style="transition: transform 0.3s">N<div
+                            class="absolute -right-1 top-1/2 w-2 h-0.5 bg-red-500"></div>
+                    </div>
+                    <div>
+                        <div class="font-bold text-white">Orientation</div>
+                        <div class="text-gray-500 text-[10px]">North Indicator</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 mb-1">
+                    <div class="w-3 h-3 bg-yellow-500/20 border border-yellow-500 rounded-full"></div> Sun Path
+                </div>
+                <div class="flex items-center gap-2 mb-1">
+                    <div class="w-3 h-3 bg-black/50 border border-black"></div> Shadow (Ground)
+                </div>
+                <div class="flex items-center gap-2 mb-1">
+                    <div class="w-3 h-3 bg-black/30 border border-black"></div> Shadow (Roof)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Component Modal -->
+    <div id="create-modal" class="fixed inset-0 modal-overlay z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-lg shadow-xl w-96 p-6 text-gray-800">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2">Add New Component</h2>
+            <div class="space-y-3">
+                <div><label class="block text-xs font-bold text-gray-500">Name</label><input type="text" id="new-name"
+                        class="w-full border p-2 rounded text-sm" placeholder="e.g. 600W Bifacial"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-bold text-gray-500">Type</label><select id="new-type"
+                            class="w-full border p-2 rounded text-sm">
+                            <option value="panel">Solar Panel</option>
+                            <option value="inverter">Inverter</option>
+                            <option value="battery">Battery</option>
+                        </select></div>
+                    <div><label class="block text-xs font-bold text-gray-500">Color</label><input type="color"
+                            id="new-color" class="w-full h-9 p-1 border rounded" value="#1e3a8a"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-bold text-gray-500">Width (m)</label><input type="number"
+                            id="new-w" class="w-full border p-2 rounded text-sm" value="1.1"></div>
+                    <div><label class="block text-xs font-bold text-gray-500">Height (m)</label><input type="number"
+                            id="new-h" class="w-full border p-2 rounded text-sm" value="2.3"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-bold text-gray-500">Capacity (W/kW)</label><input
+                            type="number" id="new-cap" class="w-full border p-2 rounded text-sm" value="600"></div>
+                    <div><label class="block text-xs font-bold text-gray-500">Cost (₹)</label><input type="number"
+                            id="new-cost" class="w-full border p-2 rounded text-sm" value="18000"></div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button onclick="document.getElementById('create-modal').classList.add('hidden')"
+                    class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded text-sm">Cancel</button>
+                <button onclick="app.addCustomComponent()"
+                    class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Add Component</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Eval Modal -->
+    <div id="eval-modal"
+        class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div
+            class="bg-white text-gray-800 rounded-xl shadow-2xl max-w-5xl w-full mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-5 bg-gray-900 text-white flex justify-between items-center border-b border-gray-700">
+                <h2 class="text-xl font-bold"><i class="fa-solid fa-chart-line text-yellow-500 mr-2"></i> Performance
+                    Report</h2>
+                <button onclick="document.getElementById('eval-modal').classList.add('hidden')"
+                    class="hover:text-gray-300 transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto grid grid-cols-4 gap-6">
+
+                <!-- Left: Score & Stats -->
+                <div class="col-span-1 space-y-4">
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 text-center">
+                        <div id="eval-score-circle"
+                            class="w-24 h-24 rounded-full border-8 border-green-500 flex items-center justify-center text-3xl font-bold text-green-600 mx-auto mb-2">
+                            95%</div>
+                        <h3 id="eval-verdict" class="text-lg font-bold mb-1 text-gray-900">System Optimized</h3>
+                        <p id="eval-summary" class="text-gray-500 text-xs">Ready for commissioning.</p>
+                    </div>
+                    <div class="p-3 bg-blue-50 rounded border border-blue-100">
+                        <div class="text-xs text-blue-800 uppercase font-bold">System Size</div>
+                        <div id="eval-dc-size" class="text-xl font-mono font-bold text-blue-600">0 kWp</div>
+                    </div>
+                    <div class="p-3 bg-purple-50 rounded border border-purple-100">
+                        <div class="text-xs text-purple-800 uppercase font-bold">Annual Generation</div>
+                        <div id="eval-annual-gen" class="text-xl font-mono font-bold text-purple-600">0 MWh</div>
+                    </div>
+                </div>
+
+                <!-- Middle: Charts -->
+                <div class="col-span-3 space-y-4">
+                    <div class="h-48 bg-white border border-gray-200 rounded p-2"><canvas id="genChart"></canvas></div>
+                    <div class="h-48 bg-white border border-gray-200 rounded p-2"><canvas id="roiChart"></canvas></div>
+                </div>
+
+                <!-- Bottom: Monthly Table -->
+                <div class="col-span-4 border-t pt-4">
+                    <h4 class="font-bold text-gray-500 text-xs uppercase mb-3 tracking-wider">Monthly Breakdown (Net vs
+                        Gross Metering)</h4>
+                    <div class="overflow-x-auto rounded border border-gray-200">
+                        <table class="w-full text-xs text-left text-gray-700">
+                            <thead class="bg-gray-100 font-bold uppercase text-gray-500">
+                                <tr>
+                                    <th class="px-3 py-2">Month</th>
+                                    <th class="px-3 py-2 text-right">Gross Gen (Units)</th>
+                                    <th class="px-3 py-2 text-right">Load (Units)</th>
+                                    <th class="px-3 py-2 text-right">Net Export (Units)</th>
+                                    <th class="px-3 py-2 text-right bg-blue-50">Net Meter Saving (₹)</th>
+                                    <th class="px-3 py-2 text-right bg-green-50">Gross Meter Income (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="month-table-body" class="divide-y divide-gray-100 bg-white">
+                                <!-- Filled by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Issues Checklist -->
+                <div class="col-span-4 border-t pt-4">
+                    <h4 class="font-bold text-gray-500 text-xs uppercase mb-3 tracking-wider">Critical Connectivity
+                        Checks</h4>
+                    <ul id="eval-list" class="text-sm space-y-2 grid grid-cols-2 gap-x-4"></ul>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+                <button onclick="document.getElementById('eval-modal').classList.add('hidden')"
+                    class="bg-gray-900 hover:bg-gray-800 text-white px-6 py-2 rounded shadow transition font-medium">Return
+                    to Editor</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if (window.currentSolarApp) window.currentSolarApp.destroy();
+
+        const COMPONENTS = {
+            'panel_585': { type: 'panel', w: 1.1, h: 2.3, watts: 585, cost: 16000, color: '#1e3a8a', structure_h: 0.5 },
+            'panel_730': { type: 'panel', w: 1.3, h: 2.4, watts: 730, cost: 22000, color: '#172554', structure_h: 0.5 },
+            'panel_450': { type: 'panel', w: 1.0, h: 2.1, watts: 450, cost: 12000, color: '#1e40af', structure_h: 0.5 },
+            'inv_string_10': { type: 'inverter', subtype: 'string', w: 0.8, h: 1, capKw: 10, cost: 85000, color: '#ef4444', h_z: 0.5 },
+            'inv_hybrid_5': { type: 'inverter', subtype: 'hybrid', w: 0.8, h: 1, capKw: 5, cost: 65000, color: '#a855f7', h_z: 0.5 },
+            'lt_panel': { type: 'bos', subtype: 'lt_panel', w: 1.0, h: 0.5, cost: 25000, color: '#4b5563', h_z: 1.5, label: 'LT Panel' },
+            'ht_panel': { type: 'bos', subtype: 'ht_panel', w: 1.2, h: 0.6, cost: 150000, color: '#374151', h_z: 1.5, label: 'HT Panel' },
+            'meter_net': { type: 'bos', subtype: 'meter_net', w: 0.4, h: 0.4, cost: 15000, color: '#10b981', h_z: 1.2, label: 'Net Meter' },
+            'meter_gross': { type: 'bos', subtype: 'meter_gross', w: 0.4, h: 0.4, cost: 15000, color: '#ef4444', h_z: 1.2, label: 'Gross Meter' },
+            'grid_point': { type: 'grid', w: 0.6, h: 0.6, cost: 0, color: '#22c55e', h_z: 0, label: 'Grid Point' },
+            'battery_5kw': { type: 'battery', w: 0.8, h: 1.2, capKwh: 5, cost: 120000, color: '#22c55e', h_z: 1 },
+            'acdb': { type: 'bos', subtype: 'acdb', w: 0.6, h: 0.8, cost: 12000, color: '#374151', h_z: 1 },
+            'trans_11kv': { type: 'bos', subtype: 'transformer', w: 1.5, h: 1.5, cost: 450000, color: '#ca8a04', voltage: '11kV', h_z: 2 },
+            'trans_33kv': { type: 'bos', subtype: 'transformer', w: 2.5, h: 2.5, cost: 850000, color: '#854d0e', voltage: '33kV', h_z: 3 },
+            'la': { type: 'safety', subtype: 'la', w: 0.2, h: 0.2, cost: 5000, color: '#f97316', h_z: 5 },
+            'earth_pit': { type: 'safety', subtype: 'earth', w: 0.5, h: 0.5, cost: 8000, color: '#15803d', h_z: 0 },
+        };
+
+        const COLORS = { grid: '#374151', bg: '#1f2937', wire_dc: '#ef4444', wire_ac: '#eab308', earth: '#16a34a', roof: '#6b7280', tinshed: '#93c5fd', obstacle: 'rgba(239, 68, 68, 0.6)', shadow: 'rgba(0, 0, 0, 0.5)', highlight: 'rgba(59, 130, 246, 0.4)', tree: 'rgba(22, 163, 74, 0.8)', building: '#475569' };
+
+        class GameApp {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.scale = 25; this.offsetX = 0; this.offsetY = 0;
+                this.mode = 'select'; this.objects = []; this.wires = []; this.sunTime = 12;
+                this.history = []; this.historyStep = -1; this.clipboard = null;
+                this.dragStart = { x: 0, y: 0 }; this.resizeHandle = null; this.isRunning = true;
+                this.wireStartObj = null; this.arrayStart = null;
+                this.cableMode = 'straight'; this.showGrid = true; this.orientation = 0;
+                this.calculatedCost = 0;
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                this.keyHandler = (e) => {
+                    if (e.target.tagName === 'INPUT') return; // Don't trigger if typing in input
+
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); this.redo(); }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 'c') { e.preventDefault(); this.copy(); }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 'v') { e.preventDefault(); this.paste(); }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.saveProject(); }
+                    else if (e.key === 'Delete' || e.key === 'Backspace') { if (this.selectedObjectId) this.deleteAt(null, this.selectedObjectId); }
+                    else if (e.key === 'r' || e.key === 'R') { this.rotateSelection(); }
+                    else if (e.key === 'v' || e.key === 'V') { this.setMode('select'); }
+                    else if (e.key === 'm' || e.key === 'M') { this.setMode('measure'); }
+                    else if (e.key === 'd' || e.key === 'D') { this.setMode('delete'); }
+                    else if (e.key === 'w' || e.key === 'W') { this.setMode('wire_dc'); }
+                    else if (e.key === 'a' || e.key === 'A') { this.setMode('wire_ac'); }
+                    else if (e.key === 'g' || e.key === 'G') { this.setMode('earthing'); }
+                };
+                window.addEventListener('keydown', this.keyHandler);
+                this.bindEvents();
+                this.loadScenario('residential');
+                this.loop();
+            }
+            destroy() { this.isRunning = false; window.removeEventListener('keydown', this.keyHandler); }
+            resize() { const c = document.getElementById('canvas-container'); this.canvas.width = c.clientWidth; this.canvas.height = c.clientHeight; if (this.objects.length === 0 && this.historyStep === -1) { this.offsetX = this.canvas.width / 2; this.offsetY = this.canvas.height / 2; } }
+            saveState() { if (this.historyStep < this.history.length - 1) this.history = this.history.slice(0, this.historyStep + 1); this.history.push(JSON.stringify({ objects: this.objects, wires: this.wires })); this.historyStep++; if (this.history.length > 50) { this.history.shift(); this.historyStep--; } this.renderLayers(); this.updateUI(); }
+            undo() { if (this.historyStep > 0) { this.historyStep--; this.restoreState(); } }
+            redo() { if (this.historyStep < this.history.length - 1) { this.historyStep++; this.restoreState(); } }
+            restoreState() { const s = JSON.parse(this.history[this.historyStep]); this.objects = s.objects; this.wires = s.wires; this.selectedObjectId = null; this.updateStats(); this.renderLayers(); this.updateUI(); }
+            copy() { if (this.selectedObjectId) { const o = this.objects.find(x => x.id === this.selectedObjectId); if (o) this.clipboard = JSON.parse(JSON.stringify(o)); } }
+            paste() { if (this.clipboard) { const n = JSON.parse(JSON.stringify(this.clipboard)); n.id = Math.random().toString(36).slice(2); n.x += 1; n.y += 1; this.objects.push(n); this.selectedObjectId = n.id; this.saveState(); this.updateStats(); } }
+            setSunTime(val) { this.sunTime = parseFloat(val); const h = Math.floor(this.sunTime), m = Math.floor((this.sunTime % 1) * 60); document.getElementById('time-display').innerText = `${h > 12 ? h - 12 : (h === 0 ? 12 : h)}:${m.toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; }
+            toggleCableMode() { this.cableMode = this.cableMode === 'straight' ? 'ortho' : 'straight'; document.getElementById('btn-cable-mode').innerHTML = this.cableMode === 'straight' ? '<i class="fa-solid fa-bezier-curve"></i> Straight' : '<i class="fa-solid fa-grip-lines"></i> Bent'; }
+            toggleGrid() { this.showGrid = !this.showGrid; document.getElementById('btn-grid-toggle').classList.toggle('bg-blue-600'); }
+            setOrientation(val) { this.orientation = parseInt(val); document.getElementById('orient-disp').innerText = this.orientation + '°'; document.getElementById('compass-icon').style.transform = `rotate(${this.orientation}deg)`; }
+
+            // --- CUSTOM COMPONENT ---
+            openCreateModal(type) {
+                document.getElementById('create-modal').classList.remove('hidden');
+                document.getElementById('new-type').value = type;
+                document.getElementById('new-cost').value = type === 'panel' ? 18000 : 60000;
+                document.getElementById('new-cap').value = type === 'panel' ? 550 : 5;
+            }
+
+            addCustomComponent() {
+                const name = document.getElementById('new-name').value || "Custom";
+                const type = document.getElementById('new-type').value;
+                const color = document.getElementById('new-color').value;
+                const w = parseFloat(document.getElementById('new-w').value) || 1;
+                const h = parseFloat(document.getElementById('new-h').value) || 1;
+                const cap = parseFloat(document.getElementById('new-cap').value) || 0;
+                const cost = parseFloat(document.getElementById('new-cost').value) || 0;
+                const id = 'cust_' + Date.now();
+                const def = { type, w, h, cost, color, h_z: 0.5 };
+                if (type === 'panel') { def.watts = cap; def.structure_h = 0.5; }
+                else if (type === 'inverter') { def.capKw = cap; def.subtype = 'string'; }
+                else if (type === 'battery') { def.capKwh = cap; def.h_z = 1; }
+                COMPONENTS[id] = def;
+                const container = type === 'panel' ? document.getElementById('tools-panel-list') : document.getElementById('tools-elec-list');
+                const div = document.createElement('div');
+                div.onclick = () => app.setTool(id);
+                div.className = "sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3";
+                div.innerHTML = `<div class="w-6 h-6 rounded border" style="background:${color}"></div><div><div class="font-bold text-sm">${name}</div><div class="text-[10px] text-gray-500">₹${cost}</div></div>`;
+                container.appendChild(div);
+                document.getElementById('create-modal').classList.add('hidden');
+            }
+
+            // --- JSON Load/Save ---
+            saveProject() {
+                const data = { version: "4.5", date: new Date().toISOString(), objects: this.objects, wires: this.wires, settings: { load: document.getElementById('input-load').value, rate: document.getElementById('input-rate').value } };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'solar-project.json'; a.click(); URL.revokeObjectURL(url);
+            }
+            loadProject(input) {
+                const file = input.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try { const data = JSON.parse(e.target.result); if (data.objects && data.wires) { this.objects = data.objects; this.wires = data.wires; if (data.settings) { document.getElementById('input-load').value = data.settings.load || 500; document.getElementById('input-rate').value = data.settings.rate || 8.5; } this.saveState(); this.updateStats(); alert("Project Loaded Successfully"); } else { alert("Invalid file format"); } } catch (err) { alert("Error loading file: " + err); }
+                }; reader.readAsText(file);
+            }
+
+            getStructureBelow(obj) {
+                const cx = obj.x + obj.w / 2; const cy = obj.y + obj.h / 2;
+                const structures = this.objects.filter(o => (o.type === 'structure' || o.type === 'obstacle') && o.id !== obj.id);
+                structures.sort((a, b) => b.h_z - a.h_z);
+                for (let s of structures) {
+                    if (cx >= s.x - 0.05 && cx <= s.x + s.w + 0.05 && cy >= s.y - 0.05 && cy <= s.y + s.h + 0.05) return s;
+                }
+                return null;
+            }
+
+            updateObjectZ(obj) {
+                const structure = this.getStructureBelow(obj);
+                const baseZ = structure ? structure.h_z : 0;
+                if (obj.type === 'panel' || ['inverter', 'bos', 'grid'].includes(obj.type)) {
+                    if (obj.relative_h === undefined) obj.relative_h = (obj.h_z - baseZ) || 0.5;
+                    obj.h_z = baseZ + obj.relative_h;
+                }
+            }
+
+            setHeight(val) {
+                if (!this.selectedObjectId) return;
+                const relativeH = parseFloat(val);
+                const obj = this.objects.find(o => o.id === this.selectedObjectId);
+                if (obj) {
+                    obj.relative_h = relativeH;
+                    this.updateObjectZ(obj);
+                    if (obj.type === 'structure' || obj.type === 'obstacle') {
+                        obj.h_z = relativeH;
+                        this.objects.forEach(child => { if (child.id !== obj.id) this.updateObjectZ(child); });
+                    }
+                    if (obj.label && obj.label.includes('(')) obj.label = obj.label.split('(')[0].trim() + ` (${obj.h_z.toFixed(1)}m)`;
+                    this.renderLayers(); this.updateUI(); this.saveState();
+                }
+            }
+            setHeightFromInput(val, unit) { let m = parseFloat(val); if (isNaN(m)) return; if (unit === 'ft') m = m * 0.3048; this.setHeight(m.toFixed(1)); }
+            rotateSelection() { if (!this.selectedObjectId) return; const obj = this.objects.find(o => o.id === this.selectedObjectId); if (obj) { const temp = obj.w; obj.w = obj.h; obj.h = temp; this.saveState(); } }
+            fillSelection(panelType) {
+                if (!this.selectedObjectId) return;
+                const structure = this.objects.find(o => o.id === this.selectedObjectId);
+                const def = COMPONENTS[panelType];
+                if (structure && structure.type === 'structure' && def) {
+                    const margin = 0.2; const startX = structure.x + margin; const startY = structure.y + margin; const endX = structure.x + structure.w - margin; const endY = structure.y + structure.h - margin;
+                    const relative_h = 0.5; const h_z = structure.h_z + relative_h;
+                    let count = 0;
+                    for (let y = startY; y + def.h < endY; y += def.h + 0.05) {
+                        for (let x = startX; x + def.w < endX; x += def.w + 0.05) {
+                            const hit = this.objects.some(o => {
+                                if (o.id === structure.id) return false;
+                                return (x < o.x + o.w && x + def.w > o.x && y < o.y + o.h && y + def.h > o.y);
+                            });
+                            if (!hit) { this.objects.push({ ...def, id: Math.random().toString(36).slice(2), x, y, h_z, relative_h }); count++; }
+                        }
+                    }
+                    if (count > 0) { this.saveState(); this.updateStats(); alert(`Filled with ${count} panels!`); } else { alert("No space to fit panels!"); }
+                } else { alert("Please select a structure (Roof/Ground) first."); }
+            }
+            setMode(m) { this.mode = m; this.selectedToolId = null; this.drawType = null; this.selectedObjectId = null; this.arrayStart = null; this.updateUI(); }
+            setTool(id) { this.mode = 'place'; this.selectedToolId = id; this.updateUI(); }
+            setDrawMode(type) { this.mode = 'draw_rect'; this.drawType = type; this.updateUI(); }
+
+            updateUI() {
+                document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('selected'));
+                if (this.mode === 'draw_rect') document.getElementById('btn-draw_' + this.drawType)?.classList.add('selected');
+                else if (this.mode !== 'place') document.getElementById('btn-' + this.mode)?.classList.add('selected');
+                else if (this.selectedToolId) document.getElementById('tool-' + this.selectedToolId)?.classList.add('selected');
+
+                if (this.selectedObjectId) {
+                    const obj = this.objects.find(o => o.id === this.selectedObjectId);
+                    if (obj) {
+                        const struct = this.getStructureBelow(obj);
+                        let baseZ = 0; let displayVal = obj.h_z;
+                        if (obj.type === 'structure' || obj.type === 'obstacle') {
+                            document.getElementById('base-h-display').innerText = "Absolute Height";
+                        } else {
+                            baseZ = struct ? struct.h_z : 0;
+                            const baseName = struct ? (struct.label || struct.subType) : "Ground";
+                            document.getElementById('base-h-display').innerText = `On ${baseName} (${baseZ}m)`;
+                            displayVal = obj.relative_h;
+                        }
+                        const m = parseFloat(displayVal).toFixed(1);
+                        document.getElementById('height-slider').value = m; document.getElementById('input-h-m').value = m; document.getElementById('input-h-ft').value = (m * 3.28084).toFixed(1);
+                    }
+                    if (obj && obj.type === 'structure') { document.getElementById('fill-actions').classList.remove('hidden'); } else { document.getElementById('fill-actions').classList.add('hidden'); }
+                    document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
+                    document.getElementById('layer-' + this.selectedObjectId)?.classList.add('active');
+                } else {
+                    document.getElementById('input-h-m').value = ''; document.getElementById('input-h-ft').value = '';
+                    document.getElementById('fill-actions').classList.add('hidden');
+                    document.getElementById('base-h-display').innerText = '';
+                    document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
+                }
+            }
+
+            renderLayers() {
+                const container = document.getElementById('layers-list');
+                container.innerHTML = '';
+                const sorted = [...this.objects].sort((a, b) => b.h_z - a.h_z);
+                sorted.forEach(o => {
+                    const div = document.createElement('div');
+                    div.className = 'layer-item p-2 flex justify-between items-center';
+                    div.id = 'layer-' + o.id;
+                    let icon = 'fa-square';
+                    if (o.type === 'panel') icon = 'fa-solar-panel'; if (o.type === 'obstacle') icon = 'fa-tree'; if (o.type === 'structure') icon = 'fa-building';
+
+                    const groupIndicator = o.groupId ? `<i class="fa-solid fa-link text-xs text-blue-400 ml-1" title="Grouped"></i>` : '';
+
+                    div.innerHTML = `
+                        <div class="flex items-center gap-2 truncate flex-1">
+                            <input type="checkbox" class="layer-check cursor-pointer" value="${o.id}" onclick="event.stopPropagation()">
+                            <i class="fa-solid ${icon} text-gray-400 w-4 text-center"></i>
+                            <span class="truncate">${o.label || o.subType || 'Object'}</span>
+                            ${groupIndicator}
+                        </div>
+                        <span class="text-xs text-gray-400 ml-2 font-mono">${o.h_z.toFixed(1)}m</span>
+                    `;
+                    div.onclick = (e) => {
+                        if (e.target.type !== 'checkbox') {
+                            this.selectedObjectId = o.id; this.updateUI();
+                        }
+                    };
+                    container.appendChild(div);
+                });
+            }
+
+            groupSelected() {
+                const checks = document.querySelectorAll('.layer-check:checked');
+                if (checks.length < 2) { alert("Select at least 2 items to group."); return; }
+                const groupId = 'grp_' + Date.now();
+                checks.forEach(c => {
+                    const obj = this.objects.find(o => o.id === c.value);
+                    if (obj) obj.groupId = groupId;
+                });
+                this.renderLayers(); this.saveState();
+            }
+
+            ungroupSelected() {
+                const checks = document.querySelectorAll('.layer-check:checked');
+                if (checks.length === 0) { alert("Select items to ungroup."); return; }
+                checks.forEach(c => {
+                    const obj = this.objects.find(o => o.id === c.value);
+                    if (obj) delete obj.groupId;
+                });
+                this.renderLayers(); this.saveState();
+            }
+
+            loadScenario(type) { this.objects = []; this.wires = []; this.offsetX = this.canvas.width / 2; this.offsetY = this.canvas.height / 2; if (type === 'residential') { this.scale = 30; this.objects.push({ id: 'roof1', type: 'structure', subType: 'roof', x: -6, y: -4, w: 12, h: 8, color: COLORS.roof, h_z: 4, label: 'Roof (4m)', relative_h: 4 }); this.objects.push({ id: 'chimney', type: 'obstacle', x: -2, y: -1, w: 1, h: 1.5, h_z: 6, label: 'Chimney (6m)', relative_h: 2 }); this.objects.push({ id: 'grid', type: 'grid', x: -9, y: 6, w: 1, h: 1, label: 'Grid', h_z: 0 }); } else if (type === 'commercial') { this.scale = 15; this.objects.push({ id: 'ground', type: 'structure', subType: 'ground', x: -25, y: -20, w: 50, h: 40, color: '#3f6212', h_z: 0, label: 'Ground', relative_h: 0 }); this.objects.push({ id: 'bldg', type: 'structure', subType: 'building', x: -10, y: 5, w: 8, h: 6, h_z: 15, label: 'Building (15m)', color: COLORS.building, relative_h: 15 }); this.objects.push({ id: 'bldg2', type: 'structure', subType: 'building', x: -10, y: 15, w: 8, h: 6, h_z: 20, label: 'Tall Bldg (20m)', color: COLORS.building, relative_h: 20 }); this.objects.push({ id: 'grid', type: 'grid', x: -28, y: 0, w: 2, h: 2, label: 'Substation', h_z: 2, relative_h: 2 }); } this.saveState(); this.updateStats(); }
+            resetMap() { this.objects = []; this.wires = []; this.saveState(); this.updateStats(); }
+            bindEvents() { this.canvas.addEventListener('mousedown', e => this.onDown(e)); this.canvas.addEventListener('mousemove', e => this.onMove(e)); this.canvas.addEventListener('mouseup', e => this.onUp(e)); this.canvas.addEventListener('wheel', e => { this.scale = Math.max(5, Math.min(100, this.scale * (e.deltaY > 0 ? 0.9 : 1.1))); }); this.canvas.addEventListener('contextmenu', e => e.preventDefault()); }
+            getWorldPos(e) { const r = this.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left - this.offsetX) / this.scale, y: (e.clientY - r.top - this.offsetY) / this.scale }; }
+            getResizeHandle(obj, wPos) { if (!obj) return null; const pad = 0.5; if (Math.abs(wPos.x - obj.x) < pad && Math.abs(wPos.y - obj.y) < pad) return 'tl'; if (Math.abs(wPos.x - (obj.x + obj.w)) < pad && Math.abs(wPos.y - obj.y) < pad) return 'tr'; if (Math.abs(wPos.x - obj.x) < pad && Math.abs(wPos.y - (obj.y + obj.h)) < pad) return 'bl'; if (Math.abs(wPos.x - (obj.x + obj.w)) < pad && Math.abs(wPos.y - (obj.y + obj.h)) < pad) return 'br'; return null; }
+
+            onDown(e) {
+                const w = this.getWorldPos(e);
+                if (e.button === 2) { this.isPanning = true; this.lastPan = { x: e.clientX, y: e.clientY }; return; }
+                if (this.mode === 'place' && COMPONENTS[this.selectedToolId]?.type === 'panel') { this.arrayStart = w; return; }
+                if (this.mode === 'select') {
+                    if (this.selectedObjectId) {
+                        const obj = this.objects.find(o => o.id === this.selectedObjectId);
+                        if (obj) { const handle = this.getResizeHandle(obj, w); if (handle) { this.resizeHandle = handle; this.resizingObject = obj; return; } }
+                    }
+                    const obj = this.findObjectAt(w);
+                    this.selectedObjectId = obj ? obj.id : null;
+                    this.updateUI();
+                    if (obj && obj.type !== 'grid') {
+                        this.draggingObject = obj;
+                        this.dragOffset = { x: w.x - obj.x, y: w.y - obj.y };
+                        this.initialDragPos = { x: obj.x, y: obj.y };
+                        this.draggingGroup = [];
+
+                        // Handle Group Dragging
+                        if (obj.groupId) {
+                            this.objects.forEach(peer => {
+                                if (peer.groupId === obj.groupId && peer.id !== obj.id) {
+                                    this.draggingGroup.push({ obj: peer, offset: { x: w.x - peer.x, y: w.y - peer.y } });
+                                }
+                            });
+                        }
+                        // Handle Structure Parent-Child Dragging (if not already handled by group)
+                        else if (obj.type === 'structure') {
+                            this.objects.forEach(child => {
+                                if (child.id !== obj.id && !child.groupId) { // Don't drag if child is part of another group
+                                    const struct = this.getStructureBelow(child);
+                                    if (struct && struct.id === obj.id) { this.draggingGroup.push({ obj: child, offset: { x: w.x - child.x, y: w.y - child.y } }); }
+                                }
+                            });
+                        }
+                    }
+                }
+                else if (this.mode === 'measure') this.measureStart = w;
+                else if (this.mode === 'draw_rect') this.currentRectStart = w;
+                else if (this.mode === 'place') this.placeComponent(w);
+                else if (this.mode === 'delete') this.deleteAt(w);
+                else if (['wire_dc', 'wire_ac', 'earthing'].includes(this.mode)) {
+                    const t = this.findObjectAt(w, true); if (t) this.wireStartObj = t;
+                }
+            }
+
+            onMove(e) {
+                const w = this.getWorldPos(e);
+                this.hoverPos = w;
+                if (this.isPanning) { this.offsetX += e.clientX - this.lastPan.x; this.offsetY += e.clientY - this.lastPan.y; this.lastPan = { x: e.clientX, y: e.clientY }; }
+                if (this.resizeHandle && this.resizingObject) {
+                    const o = this.resizingObject; const minSize = 0.5;
+                    if (this.resizeHandle === 'br') { o.w = Math.max(minSize, w.x - o.x); o.h = Math.max(minSize, w.y - o.y); }
+                    else if (this.resizeHandle === 'bl') { const oldR = o.x + o.w; o.x = Math.min(oldR - minSize, w.x); o.w = oldR - o.x; o.h = Math.max(minSize, w.y - o.y); }
+                    else if (this.resizeHandle === 'tr') { const oldB = o.y + o.h; o.y = Math.min(oldB - minSize, w.y); o.h = oldB - o.y; o.w = Math.max(minSize, w.x - o.x); }
+                    else if (this.resizeHandle === 'tl') { const oldR = o.x + o.w; const oldB = o.y + o.h; o.x = Math.min(oldR - minSize, w.x); o.w = oldR - o.x; o.y = Math.min(oldB - minSize, w.y); o.h = oldB - o.y; }
+                    if (isNaN(o.x)) o.x = 0; if (isNaN(o.y)) o.y = 0; if (isNaN(o.w)) o.w = 1; if (isNaN(o.h)) o.h = 1;
+                } else if (this.draggingObject) {
+                    const prevX = this.draggingObject.x; const prevY = this.draggingObject.y;
+                    this.draggingObject.x = w.x - this.dragOffset.x;
+                    this.draggingObject.y = w.y - this.dragOffset.y;
+                    this.updateObjectZ(this.draggingObject);
+                    if (this.draggingGroup && this.draggingGroup.length > 0) {
+                        this.draggingGroup.forEach(item => {
+                            item.obj.x = w.x - item.offset.x;
+                            item.obj.y = w.y - item.offset.y;
+                            // Keep z relative to parent 
+                            this.updateObjectZ(item.obj);
+                        });
+                    }
+                    this.updateUI();
+                }
+            }
+
+            onUp(e) {
+                const w = this.getWorldPos(e);
+                this.isPanning = false;
+                if (this.draggingObject || this.resizingObject) {
+                    this.renderLayers(); this.saveState();
+                    this.draggingObject = null; this.resizingObject = null; this.resizeHandle = null; this.draggingGroup = null;
+                }
+                if (this.mode === 'draw_rect' && this.currentRectStart) {
+                    const width = Math.abs(w.x - this.currentRectStart.x); const height = Math.abs(w.y - this.currentRectStart.y);
+                    if (width > 0.5 && height > 0.5) {
+                        const relative_h = parseFloat(document.getElementById('height-slider').value) || 3;
+                        const x = Math.min(this.currentRectStart.x, w.x), y = Math.min(this.currentRectStart.y, w.y);
+                        let color = COLORS.obstacle, label = 'Obstacle', type = 'structure';
+                        if (this.drawType === 'tree') { color = COLORS.tree; label = 'Tree'; type = 'obstacle'; }
+                        else if (this.drawType === 'building') { color = COLORS.building; label = 'Building'; }
+                        else if (this.drawType === 'roof') { color = COLORS.roof; label = 'Roof'; }
+                        else if (this.drawType === 'tinshed') { color = COLORS.tinshed; label = 'Shed'; }
+                        const tempObj = { x, y, w: width, h: height, type };
+                        const struct = this.getStructureBelow(tempObj);
+                        const baseZ = struct ? struct.h_z : 0;
+                        this.objects.push({ id: Math.random().toString(36).slice(2), type, subType: this.drawType, x, y, w: width, h: height, h_z: baseZ + relative_h, relative_h, label: `${label} (${relative_h}m)`, color });
+                        this.saveState(); this.updateStats();
+                    }
+                    this.currentRectStart = null;
+                }
+                if (this.arrayStart && this.mode === 'place') {
+                    const dist = Math.hypot(w.x - this.arrayStart.x, w.y - this.arrayStart.y);
+                    if (dist < 0.2) {
+                        // Single click detected - place one panel
+                        this.arrayStart = null;
+                        this.placeComponent(w);
+                    } else {
+                        // Drag detected - fill array
+                        const def = COMPONENTS[this.selectedToolId];
+                        if (def && def.type === 'panel') {
+                            const startX = Math.min(this.arrayStart.x, w.x); const startY = Math.min(this.arrayStart.y, w.y); const endX = Math.max(this.arrayStart.x, w.x); const endY = Math.max(this.arrayStart.y, w.y);
+                            const cx = (startX + endX) / 2, cy = (startY + endY) / 2;
+                            const tempObj = { x: cx, y: cy, w: 0, h: 0 };
+                            const structure = this.getStructureBelow(tempObj);
+                            const baseZ = structure ? structure.h_z : 0;
+                            const relative_h = 0.5;
+                            const h_z = baseZ + relative_h;
+                            for (let y = startY; y + def.h <= endY + 0.1; y += def.h + 0.05) {
+                                for (let x = startX; x + def.w <= endX + 0.1; x += def.w + 0.05) {
+                                    // Improved collision check: overlaps with ANY object
+                                    const hit = this.objects.some(o => {
+                                        if (structure && o.id === structure.id) return false; // Ignore the roof we are placing on
+                                        return (x < o.x + o.w && x + def.w > o.x && y < o.y + o.h && y + def.h > o.y);
+                                    });
+                                    if (!hit) this.objects.push({ ...def, id: Math.random().toString(36).slice(2), x, y, h_z, relative_h });
+                                }
+                            }
+                            this.saveState(); this.updateStats();
+                        }
+                        this.arrayStart = null;
+                    }
+                }
+                if (this.wireStartObj) {
+                    const t = this.findObjectAt(w, true);
+                    if (t && t !== this.wireStartObj) {
+                        let type = 'invalid';
+                        if (this.mode === 'earthing') { if (t.subtype === 'earth' || this.wireStartObj.subtype === 'earth') type = 'earth'; }
+                        else if (this.mode === 'wire_dc') { const validA = (this.wireStartObj.type === 'panel' || this.wireStartObj.type === 'inverter'); const validB = (t.type === 'panel' || t.type === 'inverter'); if (validA && validB) type = 'dc'; }
+                        else if (this.mode === 'wire_ac') { const validAC = o => ['inverter', 'bos', 'grid', 'lt_panel', 'ht_panel', 'meter_net', 'meter_gross'].includes(o.type); if (validAC(this.wireStartObj) && validAC(t)) type = 'ac'; }
+                        if (type !== 'invalid') { this.wires.push({ start: this.wireStartObj.id, end: t.id, type }); this.saveState(); this.updateStats(); }
+                    }
+                    this.wireStartObj = null;
+                }
+                if (this.mode === 'measure') this.measureStart = null;
+            }
+
+            deleteAt(pos, id = null) {
+                const t = id ? this.objects.find(o => o.id === id) : this.findObjectAt(pos);
+                if (t && t.type !== 'grid') {
+                    this.objects = this.objects.filter(o => o.id !== t.id);
+                    this.wires = this.wires.filter(w => w.start !== t.id && w.end !== t.id);
+                    this.objects.forEach(o => this.updateObjectZ(o));
+                    this.selectedObjectId = null;
+                    this.saveState();
+                    this.updateStats();
+                }
+            }
+            findObjectAt(pos, preferComponent = false) { const sorted = [...this.objects].sort((a, b) => (a.h_z - b.h_z) || (this.objects.indexOf(a) - this.objects.indexOf(b))); for (let i = sorted.length - 1; i >= 0; i--) { const o = sorted[i]; if (pos.x >= o.x && pos.x <= o.x + o.w && pos.y >= o.y && pos.y <= o.y + o.h) { if (preferComponent && o.type === 'structure') continue; return o; } } if (preferComponent) { for (let i = sorted.length - 1; i >= 0; i--) { const o = sorted[i]; if (pos.x >= o.x && pos.x <= o.x + o.w && pos.y >= o.y && pos.y <= o.y + o.h) return o; } } return null; }
+            placeComponent(pos) {
+                if (this.arrayStart) return;
+                const def = COMPONENTS[this.selectedToolId]; if (!def) return;
+                let x = Math.round(pos.x * 10) / 10, y = Math.round(pos.y * 10) / 10;
+                const snapDist = 0.5;
+                for (let o of this.objects) { if (o.type === def.type) { if (Math.abs(x - (o.x + o.w + def.w / 2)) < snapDist && Math.abs(y - (o.y + o.h / 2)) < snapDist) { x = o.x + o.w + def.w / 2; y = o.y + o.h / 2; break; } if (Math.abs(y - (o.y + o.h + def.h / 2)) < snapDist && Math.abs(x - (o.x + o.w / 2)) < snapDist) { y = o.y + o.h + def.h / 2; x = o.x + o.w / 2; break; } if (Math.abs(x - (o.x + o.w / 2)) < 0.2 && Math.abs(y - (o.y + o.h + def.h / 2)) < snapDist) { x = o.x + o.w / 2; } } }
+                const relative_h = 0.5;
+                const tempObj = { x, y, w: def.w, h: def.h };
+                const structure = this.getStructureBelow(tempObj);
+                const baseZ = structure ? structure.h_z : 0;
+                this.objects.push({ ...def, id: Math.random().toString(36).slice(2), x: x - def.w / 2, y: y - def.h / 2, h_z: baseZ + relative_h, relative_h });
+                this.saveState(); this.updateStats();
+            }
+            updateStats() {
+                let dc = 0; this.calculatedCost = 0;
+                this.objects.forEach(o => {
+                    if (o.type === 'panel') dc += o.watts;
+                    if (o.cost) this.calculatedCost += o.cost;
+                });
+                this.calculatedCost += this.wires.length * 500;
+                document.getElementById('stat-dc-cap').innerText = (dc / 1000).toFixed(2) + ' kWp';
+
+                const override = document.getElementById('input-plant-cost').value;
+                const displayCost = override ? parseInt(override) : this.calculatedCost;
+                document.getElementById('stat-cost').innerText = '₹' + displayCost.toLocaleString();
+                if (!override) document.getElementById('input-plant-cost').placeholder = '₹' + this.calculatedCost;
+            }
+            resetCost() { document.getElementById('input-plant-cost').value = ''; this.updateStats(); }
+
+            runSimulation() {
+                if (typeof Chart === 'undefined') { alert("Chart.js not loaded yet. Please check internet."); return; }
+
+                const load = parseFloat(document.getElementById('input-load').value) || 500;
+                const rate = parseFloat(document.getElementById('input-rate').value) || 8.5;
+                const systemCost = parseInt(document.getElementById('stat-cost').innerText.replace(/[^0-9]/g, '')) || 0;
+
+                const panels = this.objects.filter(o => o.type === 'panel');
+                const invs = this.objects.filter(o => o.type === 'inverter');
+                const systemSizeKw = panels.reduce((sum, p) => sum + p.watts, 0) / 1000;
+
+                let issues = [], good = [];
+                const adj = {};
+                this.wires.forEach(w => { if (!adj[w.start]) adj[w.start] = []; adj[w.start].push(w.end); if (!adj[w.end]) adj[w.end] = []; adj[w.end].push(w.start); });
+                let allPanelsConnected = true;
+                panels.forEach(p => {
+                    let q = [p.id], visited = new Set([p.id]), foundInv = false;
+                    while (q.length) { const curr = q.shift(); const obj = this.objects.find(o => o.id === curr); if (obj && obj.type === 'inverter') { foundInv = true; break; } if (adj[curr]) { adj[curr].forEach(n => { if (!visited.has(n)) { visited.add(n); q.push(n); } }); } }
+                    if (!foundInv) allPanelsConnected = false;
+                });
+                if (!allPanelsConnected) issues.push("Some panels not connected to Inverter"); else if (panels.length > 0) good.push("All panels connected to Inverter");
+                let invToGrid = true;
+                invs.forEach(inv => {
+                    let q = [inv.id], visited = new Set([inv.id]), foundGrid = false;
+                    while (q.length) { const curr = q.shift(); const obj = this.objects.find(o => o.id === curr); if (obj && (obj.type === 'grid' || obj.subtype?.includes('meter'))) { foundGrid = true; break; } if (adj[curr]) { adj[curr].forEach(n => { if (!visited.has(n)) { visited.add(n); q.push(n); } }); } }
+                    if (!foundGrid) invToGrid = false;
+                });
+                if (invs.length > 0 && !invToGrid) issues.push("Inverter not connected to Meter/Grid"); else if (invs.length > 0) good.push("Inverter connected to Grid");
+                if (systemSizeKw === 0) issues.push("No Solar Panels Installed");
+
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const seasonality = [0.8, 0.9, 1.1, 1.2, 1.25, 1.1, 1.0, 0.95, 0.95, 1.0, 0.9, 0.8];
+                const tableBody = document.getElementById('month-table-body');
+                tableBody.innerHTML = '';
+                let totalGen = 0; const monthlyGenData = [];
+                months.forEach((m, i) => {
+                    const gen = systemSizeKw * 4.5 * 30 * seasonality[i];
+                    totalGen += gen; monthlyGenData.push(gen);
+                    const net = gen - load;
+                    // Net Metering: Saving = Self Consumed * Rate + Export * Rate (assuming 1:1 for simplicity here)
+                    // Or if Export < Import rate, logic changes. Here assuming Flat Rate.
+                    const netSaving = (gen >= load) ? (load * rate + (gen - load) * rate) : (gen * rate);
+                    // Gross Metering: Income = Gen * Rate
+                    const grossIncome = gen * rate;
+
+                    const row = `<tr>
+                        <td class="px-3 py-2 font-bold text-gray-600">${m}</td>
+                        <td class="px-3 py-2 text-right text-green-600">${gen.toFixed(0)}</td>
+                        <td class="px-3 py-2 text-right text-red-600">${load.toFixed(0)}</td>
+                        <td class="px-3 py-2 text-right ${net >= 0 ? 'text-blue-600' : 'text-orange-600'}">${net.toFixed(0)}</td>
+                        <td class="px-3 py-2 text-right text-gray-800 font-mono">₹${netSaving.toFixed(0)}</td>
+                        <td class="px-3 py-2 text-right text-green-800 font-mono font-bold">₹${grossIncome.toFixed(0)}</td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                });
+
+                const roiData = []; let cumSavings = 0;
+                for (let y = 1; y <= 25; y++) {
+                    const dGen = totalGen * Math.pow(0.995, y - 1);
+                    cumSavings += (dGen * rate);
+                    roiData.push(cumSavings - systemCost);
+                }
+
+                document.getElementById('eval-modal').classList.remove('hidden');
+                const score = Math.max(0, 100 - (issues.length * 20));
+                document.getElementById('eval-score-circle').innerText = score + '%';
+                document.getElementById('eval-score-circle').className = `w-24 h-24 rounded-full border-8 flex items-center justify-center text-3xl font-bold mx-auto mb-2 ${score > 70 ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}`;
+                document.getElementById('eval-verdict').innerText = score > 80 ? "System Optimized" : "Attention Needed";
+                document.getElementById('eval-dc-size').innerText = systemSizeKw.toFixed(2) + ' kWp';
+                document.getElementById('eval-annual-gen').innerText = (totalGen / 1000).toFixed(1) + ' MWh';
+                document.getElementById('eval-list').innerHTML = [...issues, ...good].map(t => `<li class="flex items-center gap-2 ${issues.includes(t) ? 'text-red-600' : 'text-green-600'}"><i class="fa-solid ${issues.includes(t) ? 'fa-xmark' : 'fa-check'}"></i> ${t}</li>`).join('');
+
+                if (window.genChartInst) window.genChartInst.destroy();
+                window.genChartInst = new Chart(document.getElementById('genChart'), { type: 'line', data: { labels: months, datasets: [{ label: 'Generation (Units)', data: monthlyGenData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true }, { label: 'Consumption', data: Array(12).fill(load), borderColor: '#ef4444', borderDash: [5, 5] }] }, options: { maintainAspectRatio: false, plugins: { title: { display: true, text: 'Monthly Energy Balance' } } } });
+
+                if (window.roiChartInst) window.roiChartInst.destroy();
+                window.roiChartInst = new Chart(document.getElementById('roiChart'), { type: 'bar', data: { labels: [5, 10, 15, 20, 25], datasets: [{ label: 'Net Savings (₹)', data: [roiData[4], roiData[9], roiData[14], roiData[19], roiData[24]], backgroundColor: roiData[24] > 0 ? '#3b82f6' : '#ef4444' }] }, options: { maintainAspectRatio: false, plugins: { title: { display: true, text: '25-Year Financial Projection' } } } });
+            }
+
+            loop() { if (!this.isRunning) return; this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.ctx.fillStyle = COLORS.bg; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); if (this.showGrid) this.drawGrid(); this.drawRulers(); this.drawShadows(); this.objects.sort((a, b) => (a.h_z - b.h_z) || (a.y - b.y)).forEach(o => this.drawObject(o)); this.drawShadowsOnObjects(); this.drawWires(); this.drawOverlays(); this.drawSunPath(); requestAnimationFrame(() => this.loop()); }
+            drawRulers() { this.ctx.fillStyle = '#374151'; this.ctx.fillRect(0, 0, this.canvas.width, 20); this.ctx.fillRect(0, 0, 20, this.canvas.height); this.ctx.strokeStyle = '#6b7280'; this.ctx.fillStyle = '#9ca3af'; this.ctx.font = '10px monospace'; this.ctx.textAlign = 'center'; const startX = Math.floor(-this.offsetX / this.scale); const endX = Math.ceil((this.canvas.width - this.offsetX) / this.scale); this.ctx.beginPath(); for (let i = startX; i <= endX; i++) { const x = i * this.scale + this.offsetX; if (i % 5 === 0) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, 15); this.ctx.fillText(i, x, 12); } else { this.ctx.moveTo(x, 15); this.ctx.lineTo(x, 20); } } this.ctx.stroke(); const startY = Math.floor(-this.offsetY / this.scale); const endY = Math.ceil((this.canvas.height - this.offsetY) / this.scale); this.ctx.beginPath(); this.ctx.textAlign = 'left'; for (let i = startY; i <= endY; i++) { const y = i * this.scale + this.offsetY; if (i % 5 === 0) { this.ctx.moveTo(0, y); this.ctx.lineTo(15, y); this.ctx.save(); this.ctx.translate(2, y - 2); this.ctx.rotate(-Math.PI / 2); this.ctx.fillText(i, 0, 10); this.ctx.restore(); } else { this.ctx.moveTo(15, y); this.ctx.lineTo(20, y); } } this.ctx.stroke(); }
+            drawGrid() { this.ctx.strokeStyle = COLORS.grid; this.ctx.lineWidth = 1; this.ctx.beginPath(); for (let x = this.offsetX % this.scale; x < this.canvas.width; x += this.scale) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); } for (let y = this.offsetY % this.scale; y < this.canvas.height; y += this.scale) { this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); } this.ctx.stroke(); }
+            drawSunPath() { const cx = this.canvas.width / 2; const cy = this.canvas.height / 2; const r = Math.min(this.canvas.width, this.canvas.height) * 0.4; this.ctx.strokeStyle = 'rgba(234, 179, 8, 0.1)'; this.ctx.lineWidth = 2; this.ctx.setLineDash([10, 10]); this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI, false); this.ctx.stroke(); this.ctx.setLineDash([]); const angle = ((this.sunTime - 6) / 12) * Math.PI; const sunX = cx + r * Math.cos(angle); const sunY = cy + r * Math.sin(angle); this.ctx.fillStyle = '#fbbf24'; this.ctx.shadowColor = '#fbbf24'; this.ctx.shadowBlur = 20; this.ctx.beginPath(); this.ctx.arc(sunX, sunY, 8, 0, Math.PI * 2); this.ctx.fill(); this.ctx.shadowBlur = 0; }
+            getShadowVector() { const angle = ((this.sunTime - 6) / 12) * Math.PI + (this.orientation * Math.PI / 180); const elevation = Math.sin(((this.sunTime - 6) / 12) * Math.PI); if (elevation < 0.1) return null; const len = Math.min(4.0, (1 / Math.max(0.15, elevation)) * 0.8); return { x: -Math.cos(angle) * len, y: -Math.sin(angle) * len }; }
+
+            drawShadowPoly(x, y, w, h, dx, dy) {
+                if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+                const s = this.worldToScreen(x, y);
+                const ws = w * this.scale, hs = h * this.scale;
+                const offX = dx * this.scale, offY = dy * this.scale;
+                if (isNaN(s.x) || isNaN(offX)) return;
+                this.ctx.beginPath();
+                const c1 = { x: s.x, y: s.y }; const c2 = { x: s.x + ws, y: s.y }; const c3 = { x: s.x + ws, y: s.y + hs }; const c4 = { x: s.x, y: s.y + hs };
+                const p1 = { x: c1.x + offX, y: c1.y + offY }; const p2 = { x: c2.x + offX, y: c2.y + offY }; const p3 = { x: c3.x + offX, y: c3.y + offY }; const p4 = { x: c4.x + offX, y: c4.y + offY };
+                if (dx >= 0 && dy >= 0) { this.ctx.moveTo(c4.x, c4.y); this.ctx.lineTo(c1.x, c1.y); this.ctx.lineTo(c2.x, c2.y); this.ctx.lineTo(p2.x, p2.y); this.ctx.lineTo(p3.x, p3.y); this.ctx.lineTo(p4.x, p4.y); }
+                else if (dx < 0 && dy >= 0) { this.ctx.moveTo(c1.x, c1.y); this.ctx.lineTo(c2.x, c2.y); this.ctx.lineTo(c3.x, c3.y); this.ctx.lineTo(p3.x, p3.y); this.ctx.lineTo(p4.x, p4.y); this.ctx.lineTo(p1.x, p1.y); }
+                else if (dx < 0 && dy < 0) { this.ctx.moveTo(c2.x, c2.y); this.ctx.lineTo(c3.x, c3.y); this.ctx.lineTo(c4.x, c4.y); this.ctx.lineTo(p4.x, p4.y); this.ctx.lineTo(p1.x, p1.y); this.ctx.lineTo(p2.x, p2.y); }
+                else { this.ctx.moveTo(c3.x, c3.y); this.ctx.lineTo(c4.x, c4.y); this.ctx.lineTo(c1.x, c1.y); this.ctx.lineTo(p1.x, p1.y); this.ctx.lineTo(p2.x, p2.y); this.ctx.lineTo(p3.x, p3.y); }
+                this.ctx.closePath();
+                this.ctx.fill();
+            }
+
+            drawShadows() {
+                const v = this.getShadowVector(); if (!v) return; this.ctx.fillStyle = COLORS.shadow;
+                this.objects.forEach(o => {
+                    const isSitting = this.getStructureBelow(o) !== null;
+                    if (o.h_z > 0 && !isSitting) {
+                        this.drawShadowPoly(o.x, o.y, o.w, o.h, v.x * o.h_z, v.y * o.h_z);
+                    }
+                });
+            }
+
+            drawShadowsOnObjects() { const v = this.getShadowVector(); if (!v) return; for (let i = 0; i < this.objects.length; i++) { const caster = this.objects[i]; if (caster.h_z <= 0) continue; for (let j = 0; j < this.objects.length; j++) { if (i === j) continue; const receiver = this.objects[j]; if (receiver.h_z >= caster.h_z) continue; const deltaH = caster.h_z - receiver.h_z; const vecX = v.x * deltaH; const vecY = v.y * deltaH; this.ctx.save(); this.ctx.beginPath(); const s = this.worldToScreen(receiver.x, receiver.y); this.ctx.rect(s.x, s.y, receiver.w * this.scale, receiver.h * this.scale); this.ctx.clip(); this.ctx.fillStyle = 'rgba(0,0,0,0.3)'; this.drawShadowPoly(caster.x, caster.y, caster.w, caster.h, vecX, vecY); this.ctx.restore(); } } }
+
+            drawObject(o) {
+                const s = this.worldToScreen(o.x, o.y); const w = o.w * this.scale, h = o.h * this.scale;
+                if (isNaN(s.x) || isNaN(w)) return;
+                this.ctx.fillStyle = o.color || '#fff';
+                if (o.subType === 'tree') this.ctx.fillStyle = COLORS.tree;
+                this.ctx.fillRect(s.x, s.y, w, h);
+                if (o.subType === 'tinshed') { this.ctx.strokeStyle = 'rgba(255,255,255,0.2)'; this.ctx.beginPath(); for (let i = 0; i < w; i += 10) { this.ctx.moveTo(s.x + i, s.y); this.ctx.lineTo(s.x + i, s.y + h); } this.ctx.stroke(); }
+                this.ctx.strokeStyle = '#000';
+                this.ctx.lineWidth = this.selectedObjectId === o.id ? 2 : 1;
+                if (this.selectedObjectId === o.id) this.ctx.strokeStyle = '#3b82f6';
+                this.ctx.strokeRect(s.x, s.y, w, h);
+                if (o.label || o.type === 'panel') {
+                    this.ctx.fillStyle = 'white'; this.ctx.font = '10px Arial';
+                    if (o.type === 'panel') { this.ctx.strokeStyle = 'rgba(255,255,255,0.3)'; this.ctx.beginPath(); this.ctx.moveTo(s.x + w / 2, s.y); this.ctx.lineTo(s.x + w / 2, s.y + h); this.ctx.stroke(); }
+                    else if (o.label) {
+                        this.ctx.shadowColor = "black"; this.ctx.shadowBlur = 2; this.ctx.fillText(o.label, s.x, s.y - 5); this.ctx.shadowBlur = 0;
+                    }
+                }
+            }
+
+            drawWires() {
+                this.wires.forEach(l => {
+                    const a = this.objects.find(o => o.id === l.start), b = this.objects.find(o => o.id === l.end);
+                    if (!a || !b) return;
+                    const s1 = this.worldToScreen(a.x + a.w / 2, a.y + a.h / 2), s2 = this.worldToScreen(b.x + b.w / 2, b.y + b.h / 2);
+                    this.ctx.strokeStyle = COLORS['wire_' + l.type] || 'white'; this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(s1.x, s1.y);
+                    if (this.cableMode === 'ortho') { this.ctx.lineTo(s2.x, s1.y); }
+                    this.ctx.lineTo(s2.x, s2.y);
+                    this.ctx.stroke();
+                });
+            }
+
+            drawOverlays() {
+                if (this.mode === 'draw_rect' && this.currentRectStart) { const s = this.worldToScreen(this.currentRectStart.x, this.currentRectStart.y); const c = this.worldToScreen(this.hoverPos.x, this.hoverPos.y); this.ctx.strokeStyle = '#fbbf24'; this.ctx.setLineDash([5, 5]); this.ctx.strokeRect(s.x, s.y, c.x - s.x, c.y - s.y); this.ctx.setLineDash([]); const w = Math.abs(this.hoverPos.x - this.currentRectStart.x).toFixed(1), h = Math.abs(this.hoverPos.y - this.currentRectStart.y).toFixed(1); this.ctx.fillStyle = '#fbbf24'; this.ctx.fillText(`${w}m x ${h}m`, s.x, s.y - 5); }
+                if (this.arrayStart && this.mode === 'place') { const s = this.worldToScreen(this.arrayStart.x, this.arrayStart.y); const c = this.worldToScreen(this.hoverPos.x, this.hoverPos.y); this.ctx.strokeStyle = '#3b82f6'; this.ctx.lineWidth = 2; this.ctx.setLineDash([5, 5]); this.ctx.strokeRect(s.x, s.y, c.x - s.x, c.y - s.y); this.ctx.setLineDash([]); const def = COMPONENTS[this.selectedToolId]; const startX = Math.min(this.arrayStart.x, this.hoverPos.x); const startY = Math.min(this.arrayStart.y, this.hoverPos.y); const endX = Math.max(this.arrayStart.x, this.hoverPos.x); const endY = Math.max(this.arrayStart.y, this.hoverPos.y); this.ctx.globalAlpha = 0.3; this.ctx.fillStyle = def.color; for (let y = startY; y + def.h <= endY + 0.1; y += def.h + 0.05) { for (let x = startX; x + def.w <= endX + 0.1; x += def.w + 0.05) { const sc = this.worldToScreen(x, y); this.ctx.fillRect(sc.x, sc.y, def.w * this.scale, def.h * this.scale); } } this.ctx.globalAlpha = 1; }
+                else if (this.mode === 'place' && this.selectedToolId && !this.arrayStart) { const def = COMPONENTS[this.selectedToolId]; const s = this.worldToScreen(this.hoverPos.x, this.hoverPos.y); this.ctx.globalAlpha = 0.5; this.ctx.fillStyle = def.color; this.ctx.fillRect(s.x - def.w * this.scale / 2, s.y - def.h * this.scale / 2, def.w * this.scale, def.h * this.scale); this.ctx.globalAlpha = 1; }
+
+                if (this.selectedObjectId) {
+                    const o = this.objects.find(x => x.id === this.selectedObjectId);
+                    if (o) {
+                        const s = this.worldToScreen(o.x, o.y); const w = o.w * this.scale, h = o.h * this.scale;
+                        this.ctx.fillStyle = '#3b82f6'; const hs = 6;
+                        this.ctx.fillRect(s.x - hs / 2, s.y - hs / 2, hs, hs); this.ctx.fillRect(s.x + w - hs / 2, s.y - hs / 2, hs, hs); this.ctx.fillRect(s.x - hs / 2, s.y + h - hs / 2, hs, hs); this.ctx.fillRect(s.x + w - hs / 2, s.y + h - hs / 2, hs, hs);
+                        this.ctx.font = '10px sans-serif'; this.ctx.fillStyle = '#3b82f6'; this.ctx.textAlign = 'center'; this.ctx.fillText(`${o.w.toFixed(1)}m`, s.x + w / 2, s.y - 10); this.ctx.save(); this.ctx.translate(s.x - 10, s.y + h / 2); this.ctx.rotate(-Math.PI / 2); this.ctx.fillText(`${o.h.toFixed(1)}m`, 0, 0); this.ctx.restore();
+                    }
+                }
+                if (this.wireStartObj) { const a = this.objects.find(o => o.id === this.wireStartObj.id); if (a) { const s = this.worldToScreen(a.x + a.w / 2, a.y + a.h / 2); const e = this.worldToScreen(this.hoverPos.x, this.hoverPos.y); this.ctx.beginPath(); this.ctx.moveTo(s.x, s.y); this.ctx.lineTo(e.x, e.y); this.ctx.strokeStyle = '#fbbf24'; this.ctx.lineWidth = 2; this.ctx.setLineDash([5, 5]); this.ctx.stroke(); this.ctx.setLineDash([]); } }
+            }
+            worldToScreen(wx, wy) { return { x: wx * this.scale + this.offsetX, y: wy * this.scale + this.offsetY }; }
+        }
+
+        const app = new GameApp();
+        window.currentSolarApp = app;
+    </script>
+</body>
+
+</html>
