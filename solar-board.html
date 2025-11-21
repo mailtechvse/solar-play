@@ -181,6 +181,16 @@
                     class="px-3 py-1 hover:bg-gray-600 transition disabled:opacity-30"><i
                         class="fa-solid fa-rotate-right"></i></button>
             </div>
+            <div class="flex bg-gray-700 rounded border border-gray-600 mr-2">
+                <button onclick="app.toggleTheme('dark')"
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white"
+                    title="Dark Mode"><i class="fa-solid fa-moon"></i></button>
+                <button onclick="app.toggleTheme('light')"
+                    class="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white"
+                    title="Light Mode"><i class="fa-solid fa-sun"></i></button>
+                <button onclick="app.toggleTheme('sepia')" class="px-3 py-1 hover:bg-gray-600 transition text-white"
+                    title="Sepia Mode"><i class="fa-solid fa-mug-hot"></i></button>
+            </div>
             <button onclick="app.resetMap()"
                 class="bg-gray-700 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition border border-gray-600"><i
                     class="fa-solid fa-trash"></i> Clear</button>
@@ -265,39 +275,7 @@
                 <div id="layers-list" class="flex-1 overflow-y-auto bg-white"></div>
             </div>
 
-            <!-- Properties -->
-            <div class="p-3 border-b border-gray-200 bg-blue-50" id="props-panel">
-                <div class="flex justify-between items-center mb-2">
-                    <label class="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Properties</label>
-                </div>
-                <div class="mb-3">
-                    <div class="flex justify-between">
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Height (Z)</label>
-                        <span class="text-[9px] text-blue-600 font-bold" id="base-h-display">On Ground (0m)</span>
-                    </div>
-                    <div class="flex gap-2 items-center mt-1">
-                        <input type="number" id="input-h-m" class="unit-input" placeholder="0"
-                            onchange="app.setHeightFromInput(this.value, 'm')"> <span
-                            class="text-xs text-gray-500">m</span>
-                        <input type="number" id="input-h-ft" class="unit-input" placeholder="0"
-                            onchange="app.setHeightFromInput(this.value, 'ft')"> <span
-                            class="text-xs text-gray-500">ft</span>
-                    </div>
-                    <input type="range" min="0" max="50" step="0.1" value="0" id="height-slider"
-                        oninput="app.setHeight(this.value)" class="w-full mt-1">
-                </div>
-                <div id="fill-actions" class="hidden mt-3 border-t border-blue-200 pt-2">
-                    <label class="text-[10px] font-bold text-blue-800 uppercase">Auto-Fill</label>
-                    <div class="grid grid-cols-2 gap-2 mt-1">
-                        <button onclick="app.fillSelection('panel_585')"
-                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded">Fill
-                            585W</button>
-                        <button onclick="app.fillSelection('panel_730')"
-                            class="bg-blue-800 hover:bg-blue-900 text-white text-xs py-1 px-2 rounded">Fill
-                            730W</button>
-                    </div>
-                </div>
-            </div>
+            <!-- Properties (Moved to Right Panel) -->
 
             <!-- Tools -->
             <div class="flex flex-col p-2 space-y-4">
@@ -343,12 +321,36 @@
                             class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200"><i
                                 class="fa-solid fa-plus"></i></button>
                     </div>
-                    <div class="space-y-1" id="tools-panel-list">
+                    <div class="space-y-1 h-64 overflow-y-auto pr-1" id="tools-panel-list">
+                        <div onclick="app.setTool('panel_330')" id="tool-panel_330"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3">
+                            <div class="w-6 h-8 bg-blue-800 border border-blue-300 relative shrink-0"></div>
+                            <div>
+                                <div class="font-bold text-sm">330W Poly</div>
+                                <div class="text-[10px] text-gray-500">2.0m x 1.0m • ₹9000</div>
+                            </div>
+                        </div>
+                        <div onclick="app.setTool('panel_400')" id="tool-panel_400"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3">
+                            <div class="w-6 h-9 bg-blue-900 border border-blue-400 relative shrink-0"></div>
+                            <div>
+                                <div class="font-bold text-sm">400W Mono</div>
+                                <div class="text-[10px] text-gray-500">2.0m x 1.0m • ₹11000</div>
+                            </div>
+                        </div>
+                        <div onclick="app.setTool('panel_500')" id="tool-panel_500"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3">
+                            <div class="w-6 h-10 bg-black border border-gray-600 relative shrink-0"></div>
+                            <div>
+                                <div class="font-bold text-sm">500W Mono</div>
+                                <div class="text-[10px] text-gray-500">2.2m x 1.1m • ₹14000</div>
+                            </div>
+                        </div>
                         <div onclick="app.setTool('panel_585')" id="tool-panel_585"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer flex items-center gap-3">
                             <div class="w-6 h-10 bg-blue-900 border border-blue-400 relative shrink-0"></div>
                             <div>
-                                <div class="font-bold text-sm">585W Mono</div>
+                                <div class="font-bold text-sm">585W Bifacial</div>
                                 <div class="text-[10px] text-gray-500">2.3m x 1.1m • ₹16000</div>
                             </div>
                         </div>
@@ -372,14 +374,38 @@
                             class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200"><i
                                 class="fa-solid fa-plus"></i></button>
                     </div>
-                    <div class="grid grid-cols-2 gap-1" id="tools-elec-list">
+                    <div class="grid grid-cols-2 gap-1 h-64 overflow-y-auto pr-1" id="tools-elec-list">
+                        <div onclick="app.setTool('inv_micro')" id="tool-inv_micro"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">Micro Inv</div>
+                        </div>
+                        <div onclick="app.setTool('inv_string_3')" id="tool-inv_string_3"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">3kW String</div>
+                        </div>
+                        <div onclick="app.setTool('inv_string_5')" id="tool-inv_string_5"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">5kW String</div>
+                        </div>
                         <div onclick="app.setTool('inv_string_10')" id="tool-inv_string_10"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
                             <div class="font-bold text-[10px]">10kW String</div>
                         </div>
-                        <div onclick="app.setTool('inv_hybrid_5')" id="tool-inv_hybrid_5"
+                        <div onclick="app.setTool('inv_string_25')" id="tool-inv_string_25"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
-                            <div class="font-bold text-[10px]">5kW Hybrid</div>
+                            <div class="font-bold text-[10px]">25kW String</div>
+                        </div>
+                        <div onclick="app.setTool('inv_string_50')" id="tool-inv_string_50"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center">
+                            <div class="font-bold text-[10px]">50kW String</div>
+                        </div>
+                        <div onclick="app.setTool('inv_string_100')" id="tool-inv_string_100"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-red-50">
+                            <div class="font-bold text-[10px]">100kW Inv</div>
+                        </div>
+                        <div onclick="app.setTool('acdb_switch')" id="tool-acdb_switch"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-gray-100">
+                            <div class="font-bold text-[10px]">ACDB (Switch)</div>
                         </div>
                         <div onclick="app.setTool('lt_panel')" id="tool-lt_panel"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-gray-100">
@@ -388,6 +414,10 @@
                         <div onclick="app.setTool('ht_panel')" id="tool-ht_panel"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-gray-200">
                             <div class="font-bold text-[10px]">HT Panel</div>
+                        </div>
+                        <div onclick="app.setTool('load_box')" id="tool-load_box"
+                            class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-orange-50 text-orange-900">
+                            <div class="font-bold text-[10px]">Load (Consumer)</div>
                         </div>
                         <div onclick="app.setTool('meter_net')" id="tool-meter_net"
                             class="sidebar-item p-2 rounded border border-gray-200 cursor-pointer text-center bg-green-50 text-green-800">
@@ -445,7 +475,7 @@
         <div class="flex-1 bg-gray-800 relative overflow-hidden" id="canvas-container">
             <canvas id="gameCanvas" class="absolute top-0 left-0"></canvas>
             <div
-                class="absolute top-4 right-4 bg-gray-900/90 p-3 rounded-lg border border-gray-600 w-52 backdrop-blur-sm z-10">
+                class="absolute bottom-4 left-4 bg-gray-900/90 p-3 rounded-lg border border-gray-600 w-52 backdrop-blur-sm z-10">
                 <div class="flex justify-between items-center text-xs text-gray-300 mb-2 font-bold uppercase">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-sun text-yellow-500 text-lg"></i> Sun
                         Position</span>
@@ -456,28 +486,43 @@
                 <div class="flex justify-between text-[10px] text-gray-500 mt-1">
                     <span>Sunrise</span><span>Noon</span><span>Sunset</span>
                 </div>
-
                 <div class="border-t border-gray-700 mt-3 pt-2">
                     <label class="text-[10px] font-bold text-gray-400 uppercase">Orientation (North)</label>
                     <input type="range" min="0" max="360" value="0" class="w-full mt-1"
                         oninput="app.setOrientation(this.value)">
                     <div class="flex justify-between text-[9px] text-gray-500">
-                        <span>0° (Up)</span>
-                        <span id="orient-disp">0°</span>
-                        <span>360°</span>
+                        <span>0° (Up)</span><span id="orient-disp">0°</span><span>360°</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Right Details Panel -->
+            <div id="right-panel"
+                class="absolute top-0 right-0 h-full w-64 bg-white border-l border-gray-200 shadow-2xl transform transition-transform translate-x-full z-20 flex flex-col">
+                <div class="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-700 uppercase text-xs tracking-wider">Object Details</h3>
+                    <button onclick="app.closeRightPanel()" class="text-gray-400 hover:text-gray-600"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-4 flex-1 overflow-y-auto space-y-4" id="right-panel-content">
+                    <!-- Content populated by JS -->
+                </div>
+                <div class="p-3 border-t border-gray-200 bg-gray-50">
+                    <button onclick="app.deleteAt(null, app.selectedObjectId)"
+                        class="w-full bg-red-50 text-red-600 border border-red-200 rounded py-2 text-xs font-bold hover:bg-red-100 transition"><i
+                            class="fa-solid fa-trash mr-2"></i> Delete Object</button>
                 </div>
             </div>
             <div
                 class="absolute bottom-4 right-4 bg-gray-900/80 p-3 rounded text-xs text-gray-300 border border-gray-700 select-none pointer-events-none">
                 <div class="flex items-center gap-2 mb-2 border-b border-gray-700 pb-2">
                     <div class="w-8 h-8 relative border-2 border-gray-500 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-500"
-                        id="compass-icon" style="transition: transform 0.3s">N<div
+                        id="compass-icon" style="transition: transform 0.3s">E<div
                             class="absolute -right-1 top-1/2 w-2 h-0.5 bg-red-500"></div>
                     </div>
                     <div>
                         <div class="font-bold text-white">Orientation</div>
-                        <div class="text-gray-500 text-[10px]">North Indicator</div>
+                        <div class="text-gray-500 text-[10px]">East Indicator</div>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 mb-1">
@@ -568,6 +613,7 @@
                 <div class="col-span-3 space-y-4">
                     <div class="h-48 bg-white border border-gray-200 rounded p-2"><canvas id="genChart"></canvas></div>
                     <div class="h-48 bg-white border border-gray-200 rounded p-2"><canvas id="roiChart"></canvas></div>
+                    <div class="h-48 bg-white border border-gray-200 rounded p-2"><canvas id="lossChart"></canvas></div>
                 </div>
 
                 <!-- Bottom: Monthly Table -->
@@ -593,6 +639,25 @@
                     </div>
                 </div>
 
+                <!-- Yearly Table -->
+                <div class="col-span-4 border-t pt-4">
+                    <h4 class="font-bold text-gray-500 text-xs uppercase mb-3 tracking-wider">25-Year Projections</h4>
+                    <div class="overflow-x-auto rounded border border-gray-200 max-h-60 overflow-y-auto">
+                        <table class="w-full text-xs text-left text-gray-700">
+                            <thead class="bg-gray-100 font-bold uppercase text-gray-500 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-2">Year</th>
+                                    <th class="px-3 py-2 text-right">Generation (Units)</th>
+                                    <th class="px-3 py-2 text-right">Savings (₹)</th>
+                                    <th class="px-3 py-2 text-right">Cumulative (₹)</th>
+                                    <th class="px-3 py-2 text-right">ROI Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="year-table-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Issues Checklist -->
                 <div class="col-span-4 border-t pt-4">
                     <h4 class="font-bold text-gray-500 text-xs uppercase mb-3 tracking-wider">Critical Connectivity
@@ -600,9 +665,12 @@
                     <ul id="eval-list" class="text-sm space-y-2 grid grid-cols-2 gap-x-4"></ul>
                 </div>
             </div>
-            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                <button onclick="app.downloadReport()"
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow transition font-medium text-xs"><i
+                        class="fa-solid fa-file-excel mr-2"></i> Download Detailed Report</button>
                 <button onclick="document.getElementById('eval-modal').classList.add('hidden')"
-                    class="bg-gray-900 hover:bg-gray-800 text-white px-6 py-2 rounded shadow transition font-medium">Return
+                    class="bg-gray-900 hover:bg-gray-800 text-white px-6 py-2 rounded shadow transition font-medium text-xs">Return
                     to Editor</button>
             </div>
         </div>
@@ -612,13 +680,26 @@
         if (window.currentSolarApp) window.currentSolarApp.destroy();
 
         const COMPONENTS = {
+            'panel_330': { type: 'panel', w: 1.0, h: 2.0, watts: 330, cost: 9000, color: '#1e3a8a', structure_h: 0.5 },
+            'panel_400': { type: 'panel', w: 1.0, h: 2.0, watts: 400, cost: 11000, color: '#172554', structure_h: 0.5 },
+            'panel_450': { type: 'panel', w: 1.0, h: 2.1, watts: 450, cost: 12000, color: '#1e40af', structure_h: 0.5 },
+            'panel_500': { type: 'panel', w: 1.1, h: 2.2, watts: 500, cost: 14000, color: '#000000', structure_h: 0.5 },
             'panel_585': { type: 'panel', w: 1.1, h: 2.3, watts: 585, cost: 16000, color: '#1e3a8a', structure_h: 0.5 },
             'panel_730': { type: 'panel', w: 1.3, h: 2.4, watts: 730, cost: 22000, color: '#172554', structure_h: 0.5 },
-            'panel_450': { type: 'panel', w: 1.0, h: 2.1, watts: 450, cost: 12000, color: '#1e40af', structure_h: 0.5 },
+
+            'inv_micro': { type: 'inverter', subtype: 'micro', w: 0.3, h: 0.3, capKw: 0.5, cost: 8000, color: '#ef4444', h_z: 0.2 },
+            'inv_string_3': { type: 'inverter', subtype: 'string', w: 0.6, h: 0.8, capKw: 3, cost: 35000, color: '#ef4444', h_z: 0.5 },
+            'inv_string_5': { type: 'inverter', subtype: 'string', w: 0.6, h: 0.8, capKw: 5, cost: 45000, color: '#ef4444', h_z: 0.5 },
             'inv_string_10': { type: 'inverter', subtype: 'string', w: 0.8, h: 1, capKw: 10, cost: 85000, color: '#ef4444', h_z: 0.5 },
+            'inv_string_25': { type: 'inverter', subtype: 'string', w: 1.0, h: 1.2, capKw: 25, cost: 180000, color: '#ef4444', h_z: 0.5 },
+            'inv_string_50': { type: 'inverter', subtype: 'string', w: 1.2, h: 1.5, capKw: 50, cost: 350000, color: '#ef4444', h_z: 0.5 },
+            'inv_string_100': { type: 'inverter', subtype: 'string', w: 1.5, h: 1.8, capKw: 100, cost: 650000, color: '#ef4444', h_z: 0.5 },
             'inv_hybrid_5': { type: 'inverter', subtype: 'hybrid', w: 0.8, h: 1, capKw: 5, cost: 65000, color: '#a855f7', h_z: 0.5 },
-            'lt_panel': { type: 'bos', subtype: 'lt_panel', w: 1.0, h: 0.5, cost: 25000, color: '#4b5563', h_z: 1.5, label: 'LT Panel' },
+
+            'acdb_switch': { type: 'bos', subtype: 'acdb', w: 0.6, h: 0.8, cost: 15000, color: '#475569', h_z: 1.2, label: 'ACDB', isOn: true },
+            'lt_panel': { type: 'bos', subtype: 'lt_panel', w: 1.0, h: 0.5, cost: 25000, color: '#4b5563', h_z: 1.5, label: 'LT Panel', isOn: true },
             'ht_panel': { type: 'bos', subtype: 'ht_panel', w: 1.2, h: 0.6, cost: 150000, color: '#374151', h_z: 1.5, label: 'HT Panel' },
+            'load_box': { type: 'load', w: 1.0, h: 1.0, cost: 0, color: '#f59e0b', h_z: 0, label: 'Load', units: 500 },
             'meter_net': { type: 'bos', subtype: 'meter_net', w: 0.4, h: 0.4, cost: 15000, color: '#10b981', h_z: 1.2, label: 'Net Meter' },
             'meter_gross': { type: 'bos', subtype: 'meter_gross', w: 0.4, h: 0.4, cost: 15000, color: '#ef4444', h_z: 1.2, label: 'Gross Meter' },
             'grid_point': { type: 'grid', w: 0.6, h: 0.6, cost: 0, color: '#22c55e', h_z: 0, label: 'Grid Point' },
@@ -630,7 +711,7 @@
             'earth_pit': { type: 'safety', subtype: 'earth', w: 0.5, h: 0.5, cost: 8000, color: '#15803d', h_z: 0 },
         };
 
-        const COLORS = { grid: '#374151', bg: '#1f2937', wire_dc: '#ef4444', wire_ac: '#eab308', earth: '#16a34a', roof: '#6b7280', tinshed: '#93c5fd', obstacle: 'rgba(239, 68, 68, 0.6)', shadow: 'rgba(0, 0, 0, 0.5)', highlight: 'rgba(59, 130, 246, 0.4)', tree: 'rgba(22, 163, 74, 0.8)', building: '#475569' };
+        let COLORS = { grid: '#374151', bg: '#1f2937', wire_dc: '#ef4444', wire_ac: '#eab308', earth: '#16a34a', roof: '#6b7280', tinshed: '#93c5fd', obstacle: 'rgba(239, 68, 68, 0.6)', shadow: 'rgba(0, 0, 0, 0.5)', highlight: 'rgba(59, 130, 246, 0.4)', tree: 'rgba(22, 163, 74, 0.8)', building: '#475569' };
 
         class GameApp {
             constructor() {
@@ -679,6 +760,20 @@
             toggleCableMode() { this.cableMode = this.cableMode === 'straight' ? 'ortho' : 'straight'; document.getElementById('btn-cable-mode').innerHTML = this.cableMode === 'straight' ? '<i class="fa-solid fa-bezier-curve"></i> Straight' : '<i class="fa-solid fa-grip-lines"></i> Bent'; }
             toggleGrid() { this.showGrid = !this.showGrid; document.getElementById('btn-grid-toggle').classList.toggle('bg-blue-600'); }
             setOrientation(val) { this.orientation = parseInt(val); document.getElementById('orient-disp').innerText = this.orientation + '°'; document.getElementById('compass-icon').style.transform = `rotate(${this.orientation}deg)`; }
+
+            toggleTheme(mode) {
+                if (mode === 'dark') {
+                    COLORS = { grid: '#374151', bg: '#1f2937', wire_dc: '#ef4444', wire_ac: '#eab308', earth: '#16a34a', roof: '#6b7280', tinshed: '#93c5fd', obstacle: 'rgba(239, 68, 68, 0.6)', shadow: 'rgba(0, 0, 0, 0.5)', highlight: 'rgba(59, 130, 246, 0.4)', tree: 'rgba(22, 163, 74, 0.8)', building: '#475569' };
+                    document.body.classList.add('bg-gray-900', 'text-gray-100'); document.body.classList.remove('bg-gray-100', 'text-gray-900', 'sepia');
+                } else if (mode === 'light') {
+                    COLORS = { grid: '#e5e7eb', bg: '#f9fafb', wire_dc: '#dc2626', wire_ac: '#d97706', earth: '#15803d', roof: '#9ca3af', tinshed: '#bfdbfe', obstacle: 'rgba(239, 68, 68, 0.4)', shadow: 'rgba(0, 0, 0, 0.2)', highlight: 'rgba(59, 130, 246, 0.4)', tree: 'rgba(22, 163, 74, 0.6)', building: '#64748b' };
+                    document.body.classList.add('bg-gray-100', 'text-gray-900'); document.body.classList.remove('bg-gray-900', 'text-gray-100', 'sepia');
+                } else if (mode === 'sepia') {
+                    COLORS = { grid: '#d6cbb8', bg: '#f5f0e6', wire_dc: '#b91c1c', wire_ac: '#b45309', earth: '#15803d', roof: '#a8a29e', tinshed: '#dbeafe', obstacle: 'rgba(185, 28, 28, 0.4)', shadow: 'rgba(66, 32, 6, 0.2)', highlight: 'rgba(234, 179, 8, 0.4)', tree: 'rgba(21, 128, 61, 0.6)', building: '#78716c' };
+                    document.body.classList.add('bg-[#f5f0e6]', 'text-[#422006]', 'sepia'); document.body.classList.remove('bg-gray-900', 'text-gray-100', 'bg-gray-100', 'text-gray-900');
+                }
+                this.loop();
+            }
 
             // --- CUSTOM COMPONENT ---
             openCreateModal(type) {
@@ -739,12 +834,11 @@
             updateObjectZ(obj) {
                 const structure = this.getStructureBelow(obj);
                 const baseZ = structure ? structure.h_z : 0;
-                if (obj.type === 'panel' || ['inverter', 'bos', 'grid'].includes(obj.type)) {
+                if (obj.type === 'panel' || ['inverter', 'bos', 'grid', 'load', 'battery', 'safety', 'obstacle', 'structure'].includes(obj.type)) {
                     if (obj.relative_h === undefined) obj.relative_h = (obj.h_z - baseZ) || 0.5;
                     obj.h_z = baseZ + obj.relative_h;
                 }
             }
-
             setHeight(val) {
                 if (!this.selectedObjectId) return;
                 const relativeH = parseFloat(val);
@@ -752,8 +846,8 @@
                 if (obj) {
                     obj.relative_h = relativeH;
                     this.updateObjectZ(obj);
+                    // If this object supports others, update them too
                     if (obj.type === 'structure' || obj.type === 'obstacle') {
-                        obj.h_z = relativeH;
                         this.objects.forEach(child => { if (child.id !== obj.id) this.updateObjectZ(child); });
                     }
                     if (obj.label && obj.label.includes('(')) obj.label = obj.label.split('(')[0].trim() + ` (${obj.h_z.toFixed(1)}m)`;
@@ -786,37 +880,145 @@
             setTool(id) { this.mode = 'place'; this.selectedToolId = id; this.updateUI(); }
             setDrawMode(type) { this.mode = 'draw_rect'; this.drawType = type; this.updateUI(); }
 
-            updateUI() {
-                document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('selected'));
-                if (this.mode === 'draw_rect') document.getElementById('btn-draw_' + this.drawType)?.classList.add('selected');
-                else if (this.mode !== 'place') document.getElementById('btn-' + this.mode)?.classList.add('selected');
-                else if (this.selectedToolId) document.getElementById('tool-' + this.selectedToolId)?.classList.add('selected');
+            closeRightPanel() {
+                document.getElementById('right-panel').classList.add('translate-x-full');
+                this.selectedObjectId = null;
+                this.updateUI();
+            }
 
-                if (this.selectedObjectId) {
-                    const obj = this.objects.find(o => o.id === this.selectedObjectId);
-                    if (obj) {
-                        const struct = this.getStructureBelow(obj);
-                        let baseZ = 0; let displayVal = obj.h_z;
-                        if (obj.type === 'structure' || obj.type === 'obstacle') {
-                            document.getElementById('base-h-display').innerText = "Absolute Height";
-                        } else {
-                            baseZ = struct ? struct.h_z : 0;
-                            const baseName = struct ? (struct.label || struct.subType) : "Ground";
-                            document.getElementById('base-h-display').innerText = `On ${baseName} (${baseZ}m)`;
-                            displayVal = obj.relative_h;
+            updateUI() {
+                try {
+                    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('selected'));
+                    if (this.mode === 'draw_rect') document.getElementById('btn-draw_' + this.drawType)?.classList.add('selected');
+                    else if (this.mode !== 'place') document.getElementById('btn-' + this.mode)?.classList.add('selected');
+                    else if (this.selectedToolId) document.getElementById('tool-' + this.selectedToolId)?.classList.add('selected');
+
+                    const rp = document.getElementById('right-panel');
+                    const rc = document.getElementById('right-panel-content');
+
+                    if (!rp || !rc) return;
+
+                    if (this.selectedObjectId) {
+                        const obj = this.objects.find(o => o.id === this.selectedObjectId);
+                        if (obj) {
+                            rp.classList.remove('translate-x-full');
+                            const struct = this.getStructureBelow(obj);
+                            let baseZ = 0; let displayVal = obj.h_z;
+                            let baseText = "Absolute Height";
+
+                            if (obj.subType === 'ground') {
+                                // For ground, h_z is absolute
+                            } else {
+                                baseZ = struct ? struct.h_z : 0;
+                                const baseName = struct ? (struct.label || struct.subType) : "Ground";
+                                baseText = `On ${baseName} (${baseZ}m)`;
+                                displayVal = obj.relative_h;
+                            }
+
+                            // Ensure displayVal is a number
+                            if (isNaN(displayVal)) displayVal = 0;
+
+                            const m = parseFloat(displayVal).toFixed(1);
+                            const ft = (m * 3.28084).toFixed(1);
+
+                            // Safely update inputs if they exist
+                            const slider = document.getElementById('height-slider');
+                            const inputM = document.getElementById('input-h-m');
+                            const inputFt = document.getElementById('input-h-ft');
+                            if (slider) slider.value = m;
+                            if (inputM) inputM.value = m;
+                            if (inputFt) inputFt.value = ft;
+
+                            let details = `
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase">Type</label>
+                                    <div class="font-bold text-lg text-gray-800">${obj.label || obj.subType || obj.type}</div>
+                                    <div class="text-xs text-gray-400 font-mono">ID: ${obj.id.substring(0, 8)}</div>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase">Width (m)</label>
+                                        <input type="number" value="${obj.w.toFixed(2)}" class="w-full border rounded p-1 text-sm bg-gray-50" disabled>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase">Height (m)</label>
+                                        <input type="number" value="${obj.h.toFixed(2)}" class="w-full border rounded p-1 text-sm bg-gray-50" disabled>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div class="flex justify-between">
+                                        <label class="text-[10px] text-gray-500 uppercase font-bold">Elevation (Z)</label>
+                                        <span class="text-[9px] text-blue-600 font-bold">${baseText}</span>
+                                    </div>
+                                    <div class="flex gap-2 items-center mt-1">
+                                        <input type="number" id="input-h-m" class="unit-input" value="${m}" 
+                                            onchange="app.setHeightFromInput(this.value, 'm')"> <span class="text-xs text-gray-500">m</span>
+                                    </div>
+                                    <input type="range" min="0" max="50" step="0.1" value="${displayVal}" id="height-slider"
+                                        oninput="app.setHeight(this.value)" class="w-full mt-1">
+                                </div>
+                        `;
+
+                            if (obj.type === 'panel') {
+                                details += `
+                                <div class="p-2 bg-blue-50 rounded border border-blue-100">
+                                    <label class="block text-[10px] font-bold text-blue-800 uppercase">Specs</label>
+                                    <div class="text-sm font-bold text-blue-900">${obj.watts} Watts</div>
+                                    <div class="text-xs text-blue-700">₹${obj.cost}</div>
+                                </div>
+                            `;
+                            }
+
+                            if (obj.type === 'structure') {
+                                details += `
+                                <div class="mt-3 border-t border-gray-200 pt-2">
+                                    <label class="text-[10px] font-bold text-blue-800 uppercase">Auto-Fill Panels</label>
+                                    <div class="grid grid-cols-2 gap-2 mt-1">
+                                        <button onclick="app.fillSelection('panel_585')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded">Fill 585W</button>
+                                        <button onclick="app.fillSelection('panel_730')" class="bg-blue-800 hover:bg-blue-900 text-white text-xs py-1 px-2 rounded">Fill 730W</button>
+                                    </div>
+                                </div>
+                            `;
+                            }
+
+                            if (obj.subtype === 'acdb' || obj.subtype === 'lt_panel') {
+                                details += `
+                                <div class="mt-3 border-t border-gray-200 pt-2">
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase">Switch Status</label>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <button onclick="app.toggleSwitch('${obj.id}')" class="flex-1 py-1 px-2 rounded text-xs font-bold ${obj.isOn !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                            ${obj.isOn !== false ? '<i class="fa-solid fa-toggle-on text-lg"></i> ON' : '<i class="fa-solid fa-toggle-off text-lg"></i> OFF'}
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                            }
+
+                            if (obj.type === 'load') {
+                                details += `
+                                <div class="mt-3 border-t border-gray-200 pt-2">
+                                    <label class="text-[10px] font-bold text-orange-800 uppercase">Consumption</label>
+                                    <div class="mt-1">
+                                        <label class="text-[9px] text-gray-500">Monthly Units</label>
+                                        <input type="number" value="${obj.units || 500}" onchange="app.setLoadUnits('${obj.id}', this.value)" class="w-full border rounded p-1 text-sm">
+                                    </div>
+                                </div>
+                            `;
+                            }
+
+                            details += `</div>`;
+                            rc.innerHTML = details;
                         }
-                        const m = parseFloat(displayVal).toFixed(1);
-                        document.getElementById('height-slider').value = m; document.getElementById('input-h-m').value = m; document.getElementById('input-h-ft').value = (m * 3.28084).toFixed(1);
+                        document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
+                        document.getElementById('layer-' + this.selectedObjectId)?.classList.add('active');
+                    } else {
+                        rp.classList.add('translate-x-full');
+                        document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
                     }
-                    if (obj && obj.type === 'structure') { document.getElementById('fill-actions').classList.remove('hidden'); } else { document.getElementById('fill-actions').classList.add('hidden'); }
-                    document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
-                    document.getElementById('layer-' + this.selectedObjectId)?.classList.add('active');
-                } else {
-                    document.getElementById('input-h-m').value = ''; document.getElementById('input-h-ft').value = '';
-                    document.getElementById('fill-actions').classList.add('hidden');
-                    document.getElementById('base-h-display').innerText = '';
-                    document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
-                }
+                } catch (e) { console.error("UI Update Error:", e); }
             }
 
             renderLayers() {
@@ -869,6 +1071,21 @@
                     if (obj) delete obj.groupId;
                 });
                 this.renderLayers(); this.saveState();
+            }
+
+            toggleSwitch(id) {
+                const obj = this.objects.find(o => o.id === id);
+                if (obj) {
+                    obj.isOn = obj.isOn === false ? true : false;
+                    this.saveState(); this.updateUI();
+                }
+            }
+            setLoadUnits(id, val) {
+                const obj = this.objects.find(o => o.id === id);
+                if (obj) {
+                    obj.units = parseFloat(val) || 0;
+                    this.saveState();
+                }
             }
 
             loadScenario(type) { this.objects = []; this.wires = []; this.offsetX = this.canvas.width / 2; this.offsetY = this.canvas.height / 2; if (type === 'residential') { this.scale = 30; this.objects.push({ id: 'roof1', type: 'structure', subType: 'roof', x: -6, y: -4, w: 12, h: 8, color: COLORS.roof, h_z: 4, label: 'Roof (4m)', relative_h: 4 }); this.objects.push({ id: 'chimney', type: 'obstacle', x: -2, y: -1, w: 1, h: 1.5, h_z: 6, label: 'Chimney (6m)', relative_h: 2 }); this.objects.push({ id: 'grid', type: 'grid', x: -9, y: 6, w: 1, h: 1, label: 'Grid', h_z: 0 }); } else if (type === 'commercial') { this.scale = 15; this.objects.push({ id: 'ground', type: 'structure', subType: 'ground', x: -25, y: -20, w: 50, h: 40, color: '#3f6212', h_z: 0, label: 'Ground', relative_h: 0 }); this.objects.push({ id: 'bldg', type: 'structure', subType: 'building', x: -10, y: 5, w: 8, h: 6, h_z: 15, label: 'Building (15m)', color: COLORS.building, relative_h: 15 }); this.objects.push({ id: 'bldg2', type: 'structure', subType: 'building', x: -10, y: 15, w: 8, h: 6, h_z: 20, label: 'Tall Bldg (20m)', color: COLORS.building, relative_h: 20 }); this.objects.push({ id: 'grid', type: 'grid', x: -28, y: 0, w: 2, h: 2, label: 'Substation', h_z: 2, relative_h: 2 }); } this.saveState(); this.updateStats(); }
@@ -1014,7 +1231,7 @@
                         let type = 'invalid';
                         if (this.mode === 'earthing') { if (t.subtype === 'earth' || this.wireStartObj.subtype === 'earth') type = 'earth'; }
                         else if (this.mode === 'wire_dc') { const validA = (this.wireStartObj.type === 'panel' || this.wireStartObj.type === 'inverter'); const validB = (t.type === 'panel' || t.type === 'inverter'); if (validA && validB) type = 'dc'; }
-                        else if (this.mode === 'wire_ac') { const validAC = o => ['inverter', 'bos', 'grid', 'lt_panel', 'ht_panel', 'meter_net', 'meter_gross'].includes(o.type); if (validAC(this.wireStartObj) && validAC(t)) type = 'ac'; }
+                        else if (this.mode === 'wire_ac') { const validAC = o => ['inverter', 'bos', 'grid', 'lt_panel', 'ht_panel', 'meter_net', 'meter_gross', 'load'].includes(o.type); if (validAC(this.wireStartObj) && validAC(t)) type = 'ac'; }
                         if (type !== 'invalid') { this.wires.push({ start: this.wireStartObj.id, end: t.id, type }); this.saveState(); this.updateStats(); }
                     }
                     this.wireStartObj = null;
@@ -1066,7 +1283,11 @@
             runSimulation() {
                 if (typeof Chart === 'undefined') { alert("Chart.js not loaded yet. Please check internet."); return; }
 
-                const load = parseFloat(document.getElementById('input-load').value) || 500;
+                const baseLoad = parseFloat(document.getElementById('input-load').value) || 500;
+                const loadBoxes = this.objects.filter(o => o.type === 'load');
+                const boxLoad = loadBoxes.reduce((sum, b) => sum + (b.units || 500), 0);
+                const load = baseLoad + boxLoad;
+
                 const rate = parseFloat(document.getElementById('input-rate').value) || 8.5;
                 const systemCost = parseInt(document.getElementById('stat-cost').innerText.replace(/[^0-9]/g, '')) || 0;
 
@@ -1074,9 +1295,29 @@
                 const invs = this.objects.filter(o => o.type === 'inverter');
                 const systemSizeKw = panels.reduce((sum, p) => sum + p.watts, 0) / 1000;
 
+                if (systemSizeKw === 0) {
+                    document.getElementById('eval-modal').classList.remove('hidden');
+                    document.getElementById('eval-score-circle').innerText = "0%";
+                    document.getElementById('eval-score-circle').className = "w-24 h-24 rounded-full border-8 border-gray-300 flex items-center justify-center text-3xl font-bold text-gray-400 mx-auto mb-2";
+                    document.getElementById('eval-verdict').innerText = "No System Installed";
+                    document.getElementById('eval-summary').innerText = "Please place solar panels to evaluate.";
+                    document.getElementById('eval-dc-size').innerText = "0 kWp";
+                    document.getElementById('eval-annual-gen').innerText = "0 MWh";
+                    return;
+                }
+
                 let issues = [], good = [];
                 const adj = {};
-                this.wires.forEach(w => { if (!adj[w.start]) adj[w.start] = []; adj[w.start].push(w.end); if (!adj[w.end]) adj[w.end] = []; adj[w.end].push(w.start); });
+                this.wires.forEach(w => {
+                    // Check if start or end is an OFF ACDB or LT Panel
+                    const startObj = this.objects.find(o => o.id === w.start);
+                    const endObj = this.objects.find(o => o.id === w.end);
+                    if (startObj && (startObj.subtype === 'acdb' || startObj.subtype === 'lt_panel') && startObj.isOn === false) return;
+                    if (endObj && (endObj.subtype === 'acdb' || endObj.subtype === 'lt_panel') && endObj.isOn === false) return;
+
+                    if (!adj[w.start]) adj[w.start] = []; adj[w.start].push(w.end);
+                    if (!adj[w.end]) adj[w.end] = []; adj[w.end].push(w.start);
+                });
                 let allPanelsConnected = true;
                 panels.forEach(p => {
                     let q = [p.id], visited = new Set([p.id]), foundInv = false;
@@ -1091,15 +1332,37 @@
                     if (!foundGrid) invToGrid = false;
                 });
                 if (invs.length > 0 && !invToGrid) issues.push("Inverter not connected to Meter/Grid"); else if (invs.length > 0) good.push("Inverter connected to Grid");
-                if (systemSizeKw === 0) issues.push("No Solar Panels Installed");
+                // if (systemSizeKw === 0) issues.push("No Solar Panels Installed"); // This check is now handled by the early return
+
+                // Check Load Connection
+                if (loadBoxes.length > 0) {
+                    let allLoadsConnected = true;
+                    loadBoxes.forEach(l => {
+                        let q = [l.id], visited = new Set([l.id]), foundSource = false;
+                        while (q.length) { const curr = q.shift(); const obj = this.objects.find(o => o.id === curr); if (obj && (obj.type === 'grid' || obj.type === 'inverter')) { foundSource = true; break; } if (adj[curr]) { adj[curr].forEach(n => { if (!visited.has(n)) { visited.add(n); q.push(n); } }); } }
+                        if (!foundSource) allLoadsConnected = false;
+                    });
+                    if (!allLoadsConnected) issues.push("Some Load Boxes not connected to Power Source");
+                }
 
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                 const seasonality = [0.8, 0.9, 1.1, 1.2, 1.25, 1.1, 1.0, 0.95, 0.95, 1.0, 0.9, 0.8];
-                const tableBody = document.getElementById('month-table-body');
-                tableBody.innerHTML = '';
-                let totalGen = 0; const monthlyGenData = [];
+
+                const tableBodyRef = document.getElementById('month-table-body') || document.getElementById('year-table-body'); // Fallback
+                if (tableBodyRef) tableBodyRef.innerHTML = '';
+
+                const shadowLossPct = this.calculateShadowLoss();
+                const shadowLossFactor = 1 - shadowLossPct;
+
+                let totalGen = 0;
+                const monthlyGenData = [];
+                const monthlyLossData = [];
                 months.forEach((m, i) => {
-                    const gen = systemSizeKw * 4.5 * 30 * seasonality[i];
+                    const potentialGen = systemSizeKw * 4.5 * 30 * seasonality[i];
+                    const gen = potentialGen * shadowLossFactor;
+                    const loss = potentialGen - gen;
+                    monthlyLossData.push(loss);
+
                     totalGen += gen; monthlyGenData.push(gen);
                     const net = gen - load;
                     // Net Metering: Saving = Self Consumed * Rate + Export * Rate (assuming 1:1 for simplicity here)
@@ -1108,45 +1371,160 @@
                     // Gross Metering: Income = Gen * Rate
                     const grossIncome = gen * rate;
 
-                    const row = `<tr>
-                        <td class="px-3 py-2 font-bold text-gray-600">${m}</td>
-                        <td class="px-3 py-2 text-right text-green-600">${gen.toFixed(0)}</td>
-                        <td class="px-3 py-2 text-right text-red-600">${load.toFixed(0)}</td>
-                        <td class="px-3 py-2 text-right ${net >= 0 ? 'text-blue-600' : 'text-orange-600'}">${net.toFixed(0)}</td>
-                        <td class="px-3 py-2 text-right text-gray-800 font-mono">₹${netSaving.toFixed(0)}</td>
-                        <td class="px-3 py-2 text-right text-green-800 font-mono font-bold">₹${grossIncome.toFixed(0)}</td>
-                    </tr>`;
-                    tableBody.innerHTML += row;
+                    if (tableBodyRef) {
+                        const row = `<tr>
+                            <td class="px-3 py-2 font-bold text-gray-600">${m}</td>
+                            <td class="px-3 py-2 text-right text-green-600">${gen.toFixed(0)}</td>
+                            <td class="px-3 py-2 text-right text-red-600">${load.toFixed(0)}</td>
+                            <td class="px-3 py-2 text-right ${net >= 0 ? 'text-blue-600' : 'text-orange-600'}">${net.toFixed(0)}</td>
+                            <td class="px-3 py-2 text-right text-gray-800 font-mono">₹${netSaving.toFixed(0)}</td>
+                            <td class="px-3 py-2 text-right text-green-800 font-mono font-bold">₹${grossIncome.toFixed(0)}</td>
+                        </tr>`;
+                        tableBodyRef.innerHTML += row;
+                    }
                 });
 
-                const roiData = []; let cumSavings = 0;
-                for (let y = 1; y <= 25; y++) {
-                    const dGen = totalGen * Math.pow(0.995, y - 1);
-                    cumSavings += (dGen * rate);
-                    roiData.push(cumSavings - systemCost);
+                const yearTableBody = document.getElementById('year-table-body');
+                if (yearTableBody) {
+                    yearTableBody.innerHTML = '';
+                    let cumulativeSavings = 0;
+                    let roiReached = false;
+                    for (let y = 1; y <= 25; y++) {
+                        const degradation = Math.pow(0.995, y - 1);
+                        const yearGen = totalGen * degradation;
+                        const yearSavings = yearGen * rate;
+                        cumulativeSavings += yearSavings;
+                        const roiStatus = (!roiReached && cumulativeSavings >= systemCost) ? `<span class="text-green-600 font-bold">Break Even</span>` : (cumulativeSavings >= systemCost ? 'Profitable' : 'Recovering');
+                        if (!roiReached && cumulativeSavings >= systemCost) roiReached = true;
+
+                        const row = `<tr>
+                            <td class="px-3 py-2 font-bold text-gray-600">Year ${y}</td>
+                            <td class="px-3 py-2 text-right text-blue-600">${(yearGen / 1000).toFixed(1)} MWh</td>
+                            <td class="px-3 py-2 text-right text-green-600">₹${yearSavings.toFixed(0)}</td>
+                            <td class="px-3 py-2 text-right font-mono">₹${cumulativeSavings.toFixed(0)}</td>
+                            <td class="px-3 py-2 text-right text-xs">${roiStatus}</td>
+                        </tr>`;
+                        yearTableBody.innerHTML += row;
+                    }
                 }
 
                 document.getElementById('eval-modal').classList.remove('hidden');
-                const score = Math.max(0, 100 - (issues.length * 20));
-                document.getElementById('eval-score-circle').innerText = score + '%';
-                document.getElementById('eval-score-circle').className = `w-24 h-24 rounded-full border-8 flex items-center justify-center text-3xl font-bold mx-auto mb-2 ${score > 70 ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}`;
-                document.getElementById('eval-verdict').innerText = score > 80 ? "System Optimized" : "Attention Needed";
-                document.getElementById('eval-dc-size').innerText = systemSizeKw.toFixed(2) + ' kWp';
-                document.getElementById('eval-annual-gen').innerText = (totalGen / 1000).toFixed(1) + ' MWh';
-                document.getElementById('eval-list').innerHTML = [...issues, ...good].map(t => `<li class="flex items-center gap-2 ${issues.includes(t) ? 'text-red-600' : 'text-green-600'}"><i class="fa-solid ${issues.includes(t) ? 'fa-xmark' : 'fa-check'}"></i> ${t}</li>`).join('');
+                // Update Modal
+                // const checklistScore = Math.round((good.length / (good.length + issues.length || 1)) * 100);
+                // const efficiencyScore = Math.round(checklistScore * (1 - shadowLossPct));
 
+                // document.getElementById('eval-score').innerText = efficiencyScore + '%';
+                // document.getElementById('eval-title').innerText = issues.length === 0 ? "System Optimized" : "Attention Needed";
+                // document.getElementById('eval-desc').innerText = `Checklist: ${checklistScore}%. Efficiency: ${(100 - shadowLossPct * 100).toFixed(1)}%.`;
+                // document.getElementById('eval-size').innerText = systemSizeKw.toFixed(2) + " kWp";
+                // document.getElementById('eval-gen').innerText = (totalGen / 1000).toFixed(1) + " MWh";
+                // document.getElementById('eval-list').innerHTML = [...issues, ...good].map(t => `<li class="flex items-center gap-2 ${issues.includes(t) ? 'text-red-600' : 'text-green-600'}"><i class="fa-solid ${issues.includes(t) ? 'fa-xmark' : 'fa-check'}"></i> ${t}</li>`).join('');
+
+                document.getElementById('eval-dc-size').innerText = systemSizeKw.toFixed(1) + " kWp";
+                document.getElementById('eval-annual-gen').innerText = (totalGen / 1000).toFixed(1) + " MWh";
+
+                const checklistScore = Math.max(0, 100 - (issues.length * 20));
+                const finalScore = Math.round(checklistScore * shadowLossFactor);
+
+                const scoreEl = document.getElementById('eval-score-circle');
+                scoreEl.innerText = finalScore + "%";
+                if (finalScore > 80) { scoreEl.className = "w-24 h-24 rounded-full border-8 border-green-500 flex items-center justify-center text-3xl font-bold text-green-600 mx-auto mb-2"; document.getElementById('eval-verdict').innerText = "System Optimized"; document.getElementById('eval-verdict').className = "text-lg font-bold mb-1 text-green-600"; }
+                else if (finalScore > 50) { scoreEl.className = "w-24 h-24 rounded-full border-8 border-yellow-500 flex items-center justify-center text-3xl font-bold text-yellow-600 mx-auto mb-2"; document.getElementById('eval-verdict').innerText = "Needs Improvement"; document.getElementById('eval-verdict').className = "text-lg font-bold mb-1 text-yellow-600"; }
+                else { scoreEl.className = "w-24 h-24 rounded-full border-8 border-red-500 flex items-center justify-center text-3xl font-bold text-red-600 mx-auto mb-2"; document.getElementById('eval-verdict').innerText = "Critical Issues"; document.getElementById('eval-verdict').className = "text-lg font-bold mb-1 text-red-600"; }
+
+                const list = document.getElementById('eval-list');
+                list.innerHTML = '';
+                issues.forEach(i => list.innerHTML += `<li class="text-red-600"><i class="fa-solid fa-circle-xmark mr-2"></i>${i}</li>`);
+                good.forEach(i => list.innerHTML += `<li class="text-green-600"><i class="fa-solid fa-check-circle mr-2"></i>${i}</li>`);
+                list.innerHTML += `<li class="text-blue-600"><i class="fa-solid fa-cloud-sun mr-2"></i>Shadow Loss: ${(shadowLossPct * 100).toFixed(1)}%</li>`;
+
+                // Charts
                 if (window.genChartInst) window.genChartInst.destroy();
-                window.genChartInst = new Chart(document.getElementById('genChart'), { type: 'line', data: { labels: months, datasets: [{ label: 'Generation (Units)', data: monthlyGenData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true }, { label: 'Consumption', data: Array(12).fill(load), borderColor: '#ef4444', borderDash: [5, 5] }] }, options: { maintainAspectRatio: false, plugins: { title: { display: true, text: 'Monthly Energy Balance' } } } });
-
                 if (window.roiChartInst) window.roiChartInst.destroy();
-                window.roiChartInst = new Chart(document.getElementById('roiChart'), { type: 'bar', data: { labels: [5, 10, 15, 20, 25], datasets: [{ label: 'Net Savings (₹)', data: [roiData[4], roiData[9], roiData[14], roiData[19], roiData[24]], backgroundColor: roiData[24] > 0 ? '#3b82f6' : '#ef4444' }] }, options: { maintainAspectRatio: false, plugins: { title: { display: true, text: '25-Year Financial Projection' } } } });
+                if (window.lossChartInst) window.lossChartInst.destroy();
+
+                const ctxGen = document.getElementById('genChart').getContext('2d');
+                window.genChartInst = new Chart(ctxGen, {
+                    type: 'bar',
+                    data: { labels: months, datasets: [{ label: 'Generation (kWh)', data: monthlyGenData, backgroundColor: '#22c55e' }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Monthly Generation' } } }
+                });
+
+                const ctxRoi = document.getElementById('roiChart').getContext('2d');
+                window.roiChartInst = new Chart(ctxRoi, {
+                    type: 'line',
+                    data: { labels: Array.from({ length: 25 }, (_, i) => `Y${i + 1}`), datasets: [{ label: 'Cumulative Savings (₹)', data: Array.from({ length: 25 }, (_, i) => { const deg = Math.pow(0.995, i); return totalGen * deg * rate * (i + 1); }), borderColor: '#3b82f6', fill: true }] }, // Simplified for chart
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'ROI Projection' } } }
+                });
+
+                const ctxLoss = document.getElementById('lossChart').getContext('2d');
+                window.lossChartInst = new Chart(ctxLoss, {
+                    type: 'bar',
+                    data: {
+                        labels: months,
+                        datasets: [
+                            { label: 'Actual Generation', data: monthlyGenData, backgroundColor: '#22c55e' },
+                            { label: 'Loss due to Shadow', data: monthlyLossData, backgroundColor: '#ef4444' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { x: { stacked: true }, y: { stacked: true } },
+                        plugins: { title: { display: true, text: 'Generation vs Shadow Loss' } }
+                    }
+                });
+            }
+
+            downloadReport() {
+                const load = parseFloat(document.getElementById('input-load').value) || 500;
+                const rate = parseFloat(document.getElementById('input-rate').value) || 8.5;
+                const systemCost = parseInt(document.getElementById('stat-cost').innerText.replace(/[^0-9]/g, '')) || 0;
+                const panels = this.objects.filter(o => o.type === 'panel');
+                const systemSizeKw = panels.reduce((sum, p) => sum + p.watts, 0) / 1000;
+
+                let csv = "Solar Architect - Performance Report\n";
+                csv += `System Size,${systemSizeKw.toFixed(2)} kWp\n`;
+                csv += `Estimated Cost,INR ${systemCost}\n`;
+                csv += `Grid Rate,INR ${rate}/unit\n`;
+                csv += `Monthly Load,${load} Units\n\n`;
+
+                csv += "Year,Month,Generation (Units),Consumption (Units),Net Export (Units),Bill Saving (INR),Cumulative Saving (INR)\n";
+
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const seasonality = [0.8, 0.9, 1.1, 1.2, 1.25, 1.1, 1.0, 0.95, 0.95, 1.0, 0.9, 0.8];
+                let cumSavings = -systemCost;
+
+                for (let y = 1; y <= 25; y++) {
+                    const degradation = Math.pow(0.995, y - 1);
+                    months.forEach((m, i) => {
+                        const gen = systemSizeKw * 4.5 * 30 * seasonality[i] * degradation;
+                        const net = gen - load;
+                        // Simple Net Metering Logic: If Gen > Load, save full bill + export credit. If Gen < Load, save Gen * Rate.
+                        // Assuming flat rate for import/export for simplicity
+                        const saving = (gen >= load) ? (load * rate + (gen - load) * rate) : (gen * rate);
+                        cumSavings += saving;
+
+                        csv += `${y},${m},${gen.toFixed(2)},${load},${net.toFixed(2)},${saving.toFixed(2)},${cumSavings.toFixed(2)}\n`;
+                    });
+                }
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.setAttribute('hidden', '');
+                a.setAttribute('href', url);
+                a.setAttribute('download', 'solar_report_25yr.csv');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
 
             loop() { if (!this.isRunning) return; this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.ctx.fillStyle = COLORS.bg; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); if (this.showGrid) this.drawGrid(); this.drawRulers(); this.drawShadows(); this.objects.sort((a, b) => (a.h_z - b.h_z) || (a.y - b.y)).forEach(o => this.drawObject(o)); this.drawShadowsOnObjects(); this.drawWires(); this.drawOverlays(); this.drawSunPath(); requestAnimationFrame(() => this.loop()); }
             drawRulers() { this.ctx.fillStyle = '#374151'; this.ctx.fillRect(0, 0, this.canvas.width, 20); this.ctx.fillRect(0, 0, 20, this.canvas.height); this.ctx.strokeStyle = '#6b7280'; this.ctx.fillStyle = '#9ca3af'; this.ctx.font = '10px monospace'; this.ctx.textAlign = 'center'; const startX = Math.floor(-this.offsetX / this.scale); const endX = Math.ceil((this.canvas.width - this.offsetX) / this.scale); this.ctx.beginPath(); for (let i = startX; i <= endX; i++) { const x = i * this.scale + this.offsetX; if (i % 5 === 0) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, 15); this.ctx.fillText(i, x, 12); } else { this.ctx.moveTo(x, 15); this.ctx.lineTo(x, 20); } } this.ctx.stroke(); const startY = Math.floor(-this.offsetY / this.scale); const endY = Math.ceil((this.canvas.height - this.offsetY) / this.scale); this.ctx.beginPath(); this.ctx.textAlign = 'left'; for (let i = startY; i <= endY; i++) { const y = i * this.scale + this.offsetY; if (i % 5 === 0) { this.ctx.moveTo(0, y); this.ctx.lineTo(15, y); this.ctx.save(); this.ctx.translate(2, y - 2); this.ctx.rotate(-Math.PI / 2); this.ctx.fillText(i, 0, 10); this.ctx.restore(); } else { this.ctx.moveTo(15, y); this.ctx.lineTo(20, y); } } this.ctx.stroke(); }
             drawGrid() { this.ctx.strokeStyle = COLORS.grid; this.ctx.lineWidth = 1; this.ctx.beginPath(); for (let x = this.offsetX % this.scale; x < this.canvas.width; x += this.scale) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); } for (let y = this.offsetY % this.scale; y < this.canvas.height; y += this.scale) { this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); } this.ctx.stroke(); }
             drawSunPath() { const cx = this.canvas.width / 2; const cy = this.canvas.height / 2; const r = Math.min(this.canvas.width, this.canvas.height) * 0.4; this.ctx.strokeStyle = 'rgba(234, 179, 8, 0.1)'; this.ctx.lineWidth = 2; this.ctx.setLineDash([10, 10]); this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI, false); this.ctx.stroke(); this.ctx.setLineDash([]); const angle = ((this.sunTime - 6) / 12) * Math.PI; const sunX = cx + r * Math.cos(angle); const sunY = cy + r * Math.sin(angle); this.ctx.fillStyle = '#fbbf24'; this.ctx.shadowColor = '#fbbf24'; this.ctx.shadowBlur = 20; this.ctx.beginPath(); this.ctx.arc(sunX, sunY, 8, 0, Math.PI * 2); this.ctx.fill(); this.ctx.shadowBlur = 0; }
-            getShadowVector() { const angle = ((this.sunTime - 6) / 12) * Math.PI + (this.orientation * Math.PI / 180); const elevation = Math.sin(((this.sunTime - 6) / 12) * Math.PI); if (elevation < 0.1) return null; const len = Math.min(4.0, (1 / Math.max(0.15, elevation)) * 0.8); return { x: -Math.cos(angle) * len, y: -Math.sin(angle) * len }; }
+            getShadowVector() { const angle = ((this.sunTime - 6) / 12) * Math.PI + (this.orientation * Math.PI / 180); const elevation = Math.sin(((this.sunTime - 6) / 12) * Math.PI); if (elevation < 0.1) return null; const len = Math.min(3.0, (1 / Math.max(0.15, elevation)) * 0.7); return { x: -Math.cos(angle) * len, y: -Math.sin(angle) * len }; }
 
             drawShadowPoly(x, y, w, h, dx, dy) {
                 if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
@@ -1165,11 +1543,53 @@
                 this.ctx.fill();
             }
 
+            calculateShadowLoss() {
+                const v = this.getShadowVector();
+                if (!v) return 0;
+
+                let totalPanelArea = 0;
+                let totalShadowArea = 0;
+
+                const panels = this.objects.filter(o => o.type === 'panel');
+                if (panels.length === 0) return 0;
+
+                panels.forEach(p => {
+                    totalPanelArea += p.w * p.h;
+                    let points = 0;
+                    const samples = 10; // Monte Carlo samples per panel
+                    for (let i = 0; i < samples; i++) {
+                        const px = p.x + Math.random() * p.w;
+                        const py = p.y + Math.random() * p.h;
+
+                        let inShadow = false;
+                        for (let o of this.objects) {
+                            if (o.id === p.id) continue;
+                            if (o.h_z <= p.h_z) continue;
+
+                            const dh = o.h_z - p.h_z;
+                            const dx = v.x * dh;
+                            const dy = v.y * dh;
+
+                            const sx = o.x + dx;
+                            const sy = o.y + dy;
+
+                            if (px >= sx && px <= sx + o.w && py >= sy && py <= sy + o.h) {
+                                inShadow = true;
+                                break;
+                            }
+                        }
+                        if (inShadow) points++;
+                    }
+                    totalShadowArea += (points / samples) * (p.w * p.h);
+                });
+
+                return totalPanelArea > 0 ? (totalShadowArea / totalPanelArea) : 0;
+            }
+
             drawShadows() {
                 const v = this.getShadowVector(); if (!v) return; this.ctx.fillStyle = COLORS.shadow;
                 this.objects.forEach(o => {
-                    const isSitting = this.getStructureBelow(o) !== null;
-                    if (o.h_z > 0 && !isSitting) {
+                    if (o.h_z > 0) {
                         this.drawShadowPoly(o.x, o.y, o.w, o.h, v.x * o.h_z, v.y * o.h_z);
                     }
                 });
@@ -1193,6 +1613,19 @@
                     if (o.type === 'panel') { this.ctx.strokeStyle = 'rgba(255,255,255,0.3)'; this.ctx.beginPath(); this.ctx.moveTo(s.x + w / 2, s.y); this.ctx.lineTo(s.x + w / 2, s.y + h); this.ctx.stroke(); }
                     else if (o.label) {
                         this.ctx.shadowColor = "black"; this.ctx.shadowBlur = 2; this.ctx.fillText(o.label, s.x, s.y - 5); this.ctx.shadowBlur = 0;
+                    }
+                    // Draw Switch Status for ACDB and LT Panel
+                    if (o.subtype === 'acdb' || o.subtype === 'lt_panel') {
+                        this.ctx.beginPath();
+                        this.ctx.arc(s.x + w - 5, s.y + 5, 3, 0, Math.PI * 2);
+                        this.ctx.fillStyle = o.isOn !== false ? '#22c55e' : '#ef4444';
+                        this.ctx.fill();
+                    }
+                    // Draw Load Icon
+                    if (o.type === 'load') {
+                        this.ctx.fillStyle = 'white';
+                        this.ctx.font = '12px FontAwesome';
+                        this.ctx.fillText('\uf0eb', s.x + w / 2 - 4, s.y + h / 2 + 4); // Lightbulb
                     }
                 }
             }
