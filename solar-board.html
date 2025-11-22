@@ -129,6 +129,24 @@
             </div>
         </div>
 
+        <!-- Location Settings -->
+        <div class="flex items-center gap-2 bg-gray-700 px-3 py-1 rounded border border-gray-600">
+            <i class="fa-solid fa-location-dot text-red-400 text-xs"></i>
+            <div class="flex flex-col">
+                <span class="text-[8px] text-gray-400 uppercase font-bold">Location</span>
+                <div class="flex gap-1 items-center">
+                    <input type="number" id="input-lat" value="28.6"
+                        class="w-12 bg-transparent text-xs text-white font-mono border-b border-gray-500 focus:border-blue-400 outline-none"
+                        placeholder="Lat" title="Latitude">
+                    <input type="number" id="input-lon" value="77.2"
+                        class="w-12 bg-transparent text-xs text-white font-mono border-b border-gray-500 focus:border-blue-400 outline-none"
+                        placeholder="Lon" title="Longitude">
+                    <button onclick="app.detectLocation()" class="text-blue-400 hover:text-blue-300 ml-1"
+                        title="Detect My Location"><i class="fa-solid fa-crosshairs"></i></button>
+                </div>
+            </div>
+        </div>
+
         <div class="flex gap-6 text-sm font-mono bg-gray-900/50 px-4 py-1 rounded-lg border border-gray-700">
             <div class="flex flex-col items-center w-24"><span
                     class="text-gray-500 text-[10px] uppercase tracking-wider">DC Capacity</span><span id="stat-dc-cap"
@@ -534,13 +552,30 @@
                         <button onclick="app.togglePlayback()" id="btn-play"
                             class="bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 text-xs w-8 transition"><i
                                 class="fa-solid fa-play"></i></button>
-                        <input type="range" min="1" max="100" value="10"
+                        <input type="range" min="1" max="100" value="10" id="sim-speed"
                             class="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                             oninput="app.setSpeed(this.value)" title="Speed">
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-[9px] text-gray-400">
                         <div>Day: <span id="sim-day-gen" class="text-white">0</span> kWh</div>
                         <div>Total: <span id="sim-total-gen" class="text-white">0</span> MWh</div>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-gray-700 flex justify-between items-center">
+                        <div class="flex items-center gap-2">
+                            <span id="sim-weather-icon"><i class="fa-solid fa-sun text-yellow-400"></i></span>
+                            <span id="sim-irradiance" class="text-[10px] font-mono text-yellow-200">0 W/m²</span>
+                        </div>
+                        <div class="text-[9px] text-gray-500">Live Weather</div>
+                    </div>
+
+                    <!-- Google Maps Integration -->
+                    <div class="mt-3 pt-2 border-t border-gray-700">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Map Overlay</span>
+                            <button onclick="document.getElementById('map-modal').classList.remove('hidden')"
+                                class="text-[10px] text-blue-400 hover:text-blue-300"><i class="fa-solid fa-map"></i>
+                                Setup</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -586,10 +621,10 @@
 
                 <!-- Playback Controls -->
                 <div class="mt-3 pt-3 border-t border-gray-700">
-                    <div class="flex items-center justify-between mb-2">
+                    <!-- <div class="flex items-center justify-between mb-2">
                         <span class="text-[10px] text-gray-400 uppercase font-bold">Simulation</span>
                         <div class="text-xs font-mono text-yellow-400" id="sim-power">0 kW</div>
-                    </div>
+                    </div> -->
                     <div class="flex items-center gap-2">
                         <button onclick="app.togglePlayback()" id="btn-play"
                             class="bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 text-xs w-8 transition"><i
@@ -643,7 +678,60 @@
     </div>
 
     <!-- Eval Modal -->
-    <div id="eval-modal"
+    <div id="map-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-lg shadow-xl w-96 p-6 text-gray-800">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2">Google Maps Setup</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500">API Key (Static Maps & Geocoding)</label>
+                    <input type="password" id="map-api-key" class="w-full border p-2 rounded text-sm"
+                        placeholder="AIzaSy...">
+                    <div class="text-[10px] text-gray-400 mt-1">Required for fetching map images and searching
+                        locations.</div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500">Gemini API Key (AI Import)</label>
+                    <input type="password" id="gemini-api-key" class="w-full border p-2 rounded text-sm"
+                        placeholder="AIzaSy...">
+                    <div class="text-[10px] text-gray-400 mt-1">Required for AI-powered building extraction.</div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500">AI Extraction Mode</label>
+                    <select id="gemini-mode" class="w-full border p-2 rounded text-sm">
+                        <option value="building">Building Only</option>
+                        <option value="surroundings">Building + Surroundings</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500">Search Location</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="map-search-query" class="w-full border p-2 rounded text-sm"
+                            placeholder="E.g. Eiffel Tower, Paris">
+                        <button onclick="app.searchLocation()"
+                            class="bg-blue-100 text-blue-600 px-3 rounded hover:bg-blue-200"><i
+                                class="fa-solid fa-search"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500">Zoom Level</label>
+                    <input type="number" id="map-zoom" class="w-full border p-2 rounded text-sm" value="20" min="15"
+                        max="22">
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="app.loadMapOverlay()"
+                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold text-sm">Load
+                        Map</button>
+                    <button onclick="app.importBuildings()"
+                        class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded font-bold text-sm"
+                        title="Import 3D Buildings from OpenStreetMap">Import Buildings</button>
+                    <button onclick="document.getElementById('map-modal').classList.add('hidden')"
+                        class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded font-bold text-sm">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="create-modal"
         class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center backdrop-blur-sm">
         <div
             class="bg-white text-gray-800 rounded-xl shadow-2xl max-w-5xl w-full mx-4 overflow-hidden flex flex-col max-h-[90vh]">
@@ -751,6 +839,24 @@
         </div>
     </div>
 
+    <!-- Context Menu -->
+    <div id="context-menu"
+        class="fixed bg-white shadow-lg rounded-lg py-1 z-50 hidden w-48 text-gray-800 text-sm border border-gray-200">
+        <button onclick="app.handleContextAction('import_ai')"
+            class="w-full text-left px-4 py-2 hover:bg-blue-50 flex items-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-purple-500"></i> Import with AI
+        </button>
+        <button onclick="app.handleContextAction('import_osm')"
+            class="w-full text-left px-4 py-2 hover:bg-blue-50 flex items-center gap-2">
+            <i class="fa-solid fa-city text-blue-500"></i> Import (OSM)
+        </button>
+        <div class="border-t my-1"></div>
+        <button onclick="app.handleContextAction('set_origin')"
+            class="w-full text-left px-4 py-2 hover:bg-blue-50 flex items-center gap-2">
+            <i class="fa-solid fa-crosshairs text-red-500"></i> Set Origin
+        </button>
+    </div>
+
     <script>
         if (window.currentSolarApp) window.currentSolarApp.destroy();
 
@@ -790,6 +896,70 @@
 
         let COLORS = { grid: '#374151', bg: '#1f2937', wire_dc: '#ef4444', wire_ac: '#eab308', earth: '#16a34a', roof: '#6b7280', tinshed: '#93c5fd', obstacle: 'rgba(239, 68, 68, 0.6)', shadow: 'rgba(0, 0, 0, 0.5)', highlight: 'rgba(59, 130, 246, 0.4)', tree: 'rgba(22, 163, 74, 0.8)', building: '#475569' };
 
+        // --- Advanced Sun Position Algorithm (Simplified NOAA/SunCalc) ---
+        class SunCalc {
+            static getPosition(date, lat, lon) {
+                const rad = Math.PI / 180;
+                const dayMs = 1000 * 60 * 60 * 24;
+                const J1970 = 2440588;
+                const J2000 = 2451545;
+
+                const J = date.valueOf() / dayMs - 0.5 + J1970;
+                const d = J - J2000;
+
+                const L = (280.16 + 0.9856235 * d) % 360;
+                const g = (357.5291 + 0.98560028 * d) % 360;
+                const l = (L + 1.9148 * Math.sin(g * rad) + 0.02 * Math.sin(2 * g * rad) + 0.0003 * Math.sin(3 * g * rad)) * rad; // Ecliptic long
+                const eps = (23.4393 - 0.0000004 * d) * rad; // Obliquity
+
+                const ra = Math.atan2(Math.cos(eps) * Math.sin(l), Math.cos(l));
+                const dec = Math.asin(Math.sin(eps) * Math.sin(l));
+
+                const h = (6.697375 + 0.0657098242 * d + 1.0027379 * date.getUTCHours() + date.getUTCMinutes() / 60 * 1.0027379) * 15 * rad; // GMST
+                const H = h + lon * rad - ra; // Hour angle
+
+                const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat * rad) - Math.tan(dec) * Math.cos(lat * rad));
+                const alt = Math.asin(Math.sin(lat * rad) * Math.sin(dec) + Math.cos(lat * rad) * Math.cos(dec) * Math.cos(H));
+
+                return {
+                    azimuth: az + Math.PI, // 0 is South in formula, we want 0 North? Or standard 0 South. Let's align to canvas: 0 is Top (North)
+                    altitude: alt
+                };
+            }
+        }
+
+        // --- Weather Service (Open-Meteo) ---
+        class WeatherService {
+            constructor() {
+                this.cache = {};
+            }
+
+            async getWeather(lat, lon, date) {
+                // Format date YYYY-MM-DD
+                const dateStr = date.toISOString().split('T')[0];
+                const key = `${lat},${lon},${dateStr}`;
+
+                if (this.cache[key]) return this.cache[key];
+
+                try {
+                    // Fetch hourly irradiance and cloud cover
+                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=direct_normal_irradiance,diffuse_radiation,cloudcover&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`;
+                    const resp = await fetch(url);
+                    const data = await resp.json();
+
+                    if (!data.hourly) throw new Error("No data");
+
+                    this.cache[key] = data.hourly;
+                    return data.hourly;
+                } catch (e) {
+                    console.error("Weather fetch failed:", e);
+                    return null; // Fallback to clear sky
+                }
+            }
+        }
+
+        const weatherService = new WeatherService();
+
         class GameApp {
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
@@ -801,22 +971,64 @@
                 this.wireStartObj = null; this.arrayStart = null;
                 this.cableMode = 'straight'; this.showGrid = true; this.orientation = 0;
                 this.calculatedCost = 0;
-                this.playbackSpeed = 10; this.isPlaying = false; this.lastFrameTime = 0;
-                this.simMonth = 5; // June default
-                this.simDayGen = 0; this.simTotalGen = 0;
-                this.simTotalImport = 0; this.simTotalExport = 0;
-                this.resize();
-                window.addEventListener('resize', () => this.resize());
-                this.keyHandler = (e) => {
-                    if (e.target.tagName === 'INPUT') return; // Don't trigger if typing in input
+                this.simMonth = 0; this.simDayGen = 0; this.simTotalGen = 0; this.simTotalImport = 0; this.simTotalExport = 0;
+                this.isPlaying = false; this.lastFrameTime = 0; this.playbackSpeed = 10;
 
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
-                    else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); this.redo(); }
-                    else if ((e.ctrlKey || e.metaKey) && e.key === 'c') { e.preventDefault(); this.copy(); }
-                    else if ((e.ctrlKey || e.metaKey) && e.key === 'v') { e.preventDefault(); this.paste(); }
-                    else if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.saveProject(); }
-                    else if (e.key === 'Delete' || e.key === 'Backspace') { if (this.selectedObjectId) this.deleteAt(null, this.selectedObjectId); }
-                    else if (e.key === 'r' || e.key === 'R') { this.rotateSelection(); }
+                // Load API Keys
+                const savedMapKey = localStorage.getItem('google_maps_api_key');
+                if (savedMapKey) document.getElementById('map-api-key').value = savedMapKey;
+
+                const savedGeminiKey = localStorage.getItem('google_gemini_api_key');
+                if (savedGeminiKey) document.getElementById('gemini-api-key').value = savedGeminiKey;
+
+                // Resize Listener
+                window.addEventListener('resize', () => this.resize());
+                this.resize();
+
+                // Add Input Listeners for API Keys
+                document.getElementById('map-api-key').addEventListener('change', (e) => {
+                    localStorage.setItem('google_maps_api_key', e.target.value);
+                });
+                document.getElementById('gemini-api-key').addEventListener('change', (e) => {
+                    localStorage.setItem('google_gemini_api_key', e.target.value);
+                });
+
+                // Context Menu
+                this.contextMenu = document.getElementById('context-menu');
+                this.contextPos = { x: 0, y: 0, lat: 0, lon: 0 };
+
+                window.addEventListener('click', () => this.contextMenu.classList.add('hidden'));
+                this.canvas.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    const r = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - r.left;
+                    const y = e.clientY - r.top;
+                    const w = this.screenToWorld(x, y);
+
+                    // Calculate Lat/Lon
+                    const centerLat = parseFloat(document.getElementById('input-lat').value);
+                    const centerLon = parseFloat(document.getElementById('input-lon').value);
+                    if (centerLat && centerLon) {
+                        const latMeters = 111320;
+                        const lonMeters = 40075000 * Math.cos(centerLat * Math.PI / 180) / 360;
+                        const dLat = -(w.y / latMeters);
+                        const dLon = w.x / lonMeters;
+                        this.contextPos = { x: e.clientX, y: e.clientY, lat: centerLat + dLat, lon: centerLon + dLon };
+
+                        this.contextMenu.style.left = e.clientX + 'px';
+                        this.contextMenu.style.top = e.clientY + 'px';
+                        this.contextMenu.classList.remove('hidden');
+                    }
+                });
+
+                // Keyboard Shortcuts
+                this.keyHandler = (e) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') this.deleteAt(null, this.selectedObjectId);
+                    else if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) this.undo();
+                    else if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) this.copy();
+                    else if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) this.paste();
+                    else if (e.key === 'Escape') { this.setMode('select'); this.selectedObjectId = null; this.updateUI(); }
+                    else if (e.key === 's' || e.key === 'S') { this.setMode('select'); }
                     else if (e.key === 'v' || e.key === 'V') { this.setMode('select'); }
                     else if (e.key === 'm' || e.key === 'M') { this.setMode('measure'); }
                     else if (e.key === 'd' || e.key === 'D') { this.setMode('delete'); }
@@ -880,87 +1092,304 @@
                 this.updateUI(); // Reset meter readings in UI
             }
 
-            updatePlayback(timestamp) {
+            async searchLocation() {
+                const apiKey = document.getElementById('map-api-key').value;
+                const query = document.getElementById('map-search-query').value;
+
+                if (!apiKey) { alert("Please enter API Key first"); return; }
+                if (!query) { alert("Please enter a location to search"); return; }
+
+                try {
+                    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`;
+                    const resp = await fetch(url);
+                    const data = await resp.json();
+
+                    if (data.status === 'OK' && data.results.length > 0) {
+                        const loc = data.results[0].geometry.location;
+                        document.getElementById('input-lat').value = loc.lat.toFixed(4);
+                        document.getElementById('input-lon').value = loc.lng.toFixed(4);
+                        alert(`Found: ${data.results[0].formatted_address}`);
+                    } else {
+                        alert("Location not found: " + data.status);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Search failed. Check API Key and Internet.");
+                }
+            }
+
+            async importBuildings() {
+                const lat = parseFloat(document.getElementById('input-lat').value);
+                const lon = parseFloat(document.getElementById('input-lon').value);
+                const zoom = parseInt(document.getElementById('map-zoom').value) || 20;
+
+                if (!lat || !lon) { alert("Please set location first."); return; }
+
+                // Calculate Bounding Box (approx 200m radius)
+                // 1 deg lat ~ 111km. 0.002 deg ~ 222m
+                const radius = 0.002;
+                const s = lat - radius;
+                const w = lon - radius;
+                const n = lat + radius;
+                const e = lon + radius;
+
+                const query = `[out:json];(way["building"](${s},${w},${n},${e}););out body;>;out skel qt;`;
+                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+                try {
+                    alert("Fetching building data from OpenStreetMap...");
+                    const resp = await fetch(url);
+                    const data = await resp.json();
+
+                    if (!data.elements || data.elements.length === 0) {
+                        alert("No buildings found in this area.");
+                        return;
+                    }
+
+                    // Process Nodes
+                    const nodes = {};
+                    data.elements.forEach(el => {
+                        if (el.type === 'node') nodes[el.id] = { lat: el.lat, lon: el.lon };
+                    });
+
+                    // Process Ways (Buildings)
+                    let count = 0;
+                    data.elements.forEach(el => {
+                        if (el.type === 'way' && el.tags && el.tags.building) {
+                            // Convert nodes to world coords
+                            // Center of world is (lat, lon) -> (0, 0) offset by mapOffset?
+                            // World 0,0 is at screen center if no offset.
+                            // Let's assume World 0,0 corresponds to the 'lat, lon' input.
+
+                            // Meters per degree
+                            const latMeters = 111320;
+                            const lonMeters = 40075000 * Math.cos(lat * Math.PI / 180) / 360;
+
+                            // Calculate bounds of the building to create a rect
+                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+                            el.nodes.forEach(nid => {
+                                const node = nodes[nid];
+                                if (node) {
+                                    // Delta from center in meters
+                                    const dy = -(node.lat - lat) * latMeters; // Y is down in canvas, Lat is up. So invert.
+                                    const dx = (node.lon - lon) * lonMeters;
+
+                                    if (dx < minX) minX = dx;
+                                    if (dy < minY) minY = dy;
+                                    if (dx > maxX) maxX = dx;
+                                    if (dy > maxY) maxY = dy;
+                                }
+                            });
+
+                            if (minX !== Infinity) {
+                                const width = maxX - minX;
+                                const height = maxY - minY;
+
+                                // Estimate Height
+                                let levels = 1;
+                                if (el.tags['building:levels']) levels = parseInt(el.tags['building:levels']);
+                                else if (el.tags.height) levels = parseFloat(el.tags.height) / 3;
+                                const h_z = levels * 3; // 3m per floor
+
+                                // Create Object
+                                const id = 'bldg_' + el.id;
+                                // Check if exists
+                                if (!this.objects.find(o => o.id === id)) {
+                                    this.objects.push({
+                                        id: id,
+                                        type: 'structure', // Use structure for buildings
+                                        subtype: 'building',
+                                        x: minX, // Meters, relative to center (0,0)
+                                        y: minY,
+                                        w: width, // Meters
+                                        h: height,
+                                        h_z: h_z,
+                                        color: COLORS.building,
+                                        rotation: 0
+                                    });
+                                    count++;
+                                }
+                            }
+                        }
+                    });
+
+                    // Center View on (0,0)
+                    this.offsetX = this.canvas.width / 2;
+                    this.offsetY = this.canvas.height / 2;
+
+                    this.saveState();
+                    this.renderLayers();
+                    document.getElementById('map-modal').classList.add('hidden');
+                    alert(`Imported ${count} buildings! View centered.`);
+
+                } catch (e) {
+                    console.error(e);
+                    alert("Import failed. Check internet.");
+                }
+            }
+
+            loadMapOverlay() {
+                const apiKey = document.getElementById('map-api-key').value;
+                if (!apiKey) { alert("Please enter a Google Maps API Key"); return; }
+
+                const lat = document.getElementById('input-lat').value;
+                const lon = document.getElementById('input-lon').value;
+                const zoom = document.getElementById('map-zoom').value;
+
+                // Calculate map dimensions based on canvas size
+                // Static Maps API max size is 640x640 for free tier usually, but let's try requesting larger or scaling
+                // Better: Use a fixed size and scale canvas to match? Or just center it.
+                const w = 640; const h = 640;
+
+                const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=${zoom}&size=${w}x${h}&maptype=satellite&key=${apiKey}`;
+
+                const img = new Image();
+                img.crossOrigin = "Anonymous";
+                img.onload = () => {
+                    this.mapImage = img;
+                    this.mapOffset = { x: 0, y: 0 }; // Center map at 0,0 world coords?
+                    // Let's align map center to world 0,0
+                    // Map covers world area based on zoom.
+                    // At zoom 20, 1 pixel is approx 0.149 meters at equator.
+                    // Meters/pixel = 156543.03392 * cos(lat * PI/180) / 2^zoom
+                    const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+                    this.mapScale = 1 / metersPerPixel; // pixels per meter (world scale is pixels per meter)
+                    // Actually our this.scale is pixels per meter (25 default).
+                    // We need to draw the map image such that it matches real world dimensions.
+                    // Image width in meters = w * metersPerPixel.
+                    // We draw image at x,y with width,height in world coords?
+                    // No, we draw in screen coords.
+                    // Let's store map properties and draw in loop.
+                    this.mapMetersPerPixel = metersPerPixel;
+                    document.getElementById('map-modal').classList.add('hidden');
+                    alert("Map Loaded! Aligning grid to map...");
+                };
+                img.onerror = () => alert("Failed to load map. Check API Key and Internet.");
+                img.src = url;
+            }
+
+            async updatePlayback(timestamp) {
                 if (!this.isPlaying) return;
+                if (!this.lastFrameTime) this.lastFrameTime = timestamp;
                 const dt = (timestamp - this.lastFrameTime) / 1000;
                 this.lastFrameTime = timestamp;
 
-                // Speed factor: 10 = 1 hour per second roughly
-                const dt_hours = (this.playbackSpeed / 10) * dt;
+                const speed = parseInt(document.getElementById('sim-speed').value) || 10;
+                const dt_hours = (dt * speed) / 60; // Real seconds to Sim hours
                 this.sunTime += dt_hours;
 
-                if (this.sunTime >= 18) {
-                    this.sunTime = 6; // Loop 6 AM to 6 PM
-                    this.simDayGen = 0; // Reset day counter on new day
+                if (this.sunTime >= 24) {
+                    this.sunTime -= 24;
+                    this.simDayGen = 0; // Reset day gen at midnight
                 }
 
                 this.setSunTime(this.sunTime);
 
-                // Calculate Instant Power & Energy
-                const declination = -23.45 * Math.cos((360 / 365) * (this.simMonth * 30 + 10) * Math.PI / 180);
-                // Adjust elevation based on month (simplified)
-                // Max elevation at noon = 90 - Latitude + Declination. Assume Lat 28 (Delhi).
-                // Max El = 90 - 28 + Dec.
-                // Current simple model: sin((t-6)/12 * PI). This peaks at 1.
-                // Let's scale it.
-                const maxEl = Math.sin(((90 - 28 + declination) * Math.PI) / 180);
-                const timeFactor = Math.sin(((this.sunTime - 6) / 12) * Math.PI);
-                const elevation = timeFactor * maxEl; // Rough approximation
+                // --- Realistic Solar Calculation ---
+                const lat = parseFloat(document.getElementById('input-lat').value) || 28.6;
+                const lon = parseFloat(document.getElementById('input-lon').value) || 77.2;
 
-                if (elevation > 0) {
-                    const panels = this.objects.filter(o => o.type === 'panel');
-                    const totalCap = panels.reduce((sum, p) => sum + p.watts, 0) / 1000;
+                // Create date object for current sim time (assume current year/month/day for now)
+                const now = new Date();
+                now.setMonth(this.simMonth);
+                now.setHours(Math.floor(this.sunTime));
+                now.setMinutes((this.sunTime % 1) * 60);
 
-                    // Shadow Loss (Instant)
-                    // We need to pass the current sun vector which is updated by setSunTime
-                    // But calculateShadowLoss uses this.getShadowVector() which uses this.sunTime.
-                    // So it should be fine.
-                    const shadowLoss = this.calculateShadowLoss();
+                // 1. Sun Position
+                const sunPos = SunCalc.getPosition(now, lat, lon);
+                const elevation = sunPos.altitude; // Radians
+                const azimuth = sunPos.azimuth; // Radians
 
-                    const instantPower = totalCap * elevation * (1 - shadowLoss) * 4.5; // Scaling to match peak ~4.5 units/kW/day
-                    // Actually, let's keep it simple: Power = Cap * Factor.
-                    // If 1kW panel, peak sun, it gives ~0.8-0.9kW output.
-                    const powerOutput = totalCap * elevation * (1 - shadowLoss);
+                // 2. Weather & Irradiance
+                let irradiance = 0;
+                let cloudCover = 0;
 
-                    document.getElementById('sim-power').innerText = powerOutput.toFixed(2) + " kW";
+                // Try fetch weather
+                const weatherData = await weatherService.getWeather(lat, lon, now);
 
-                    // Energy Accumulation
-                    const gen_kWh = powerOutput * dt_hours;
-                    this.simDayGen += gen_kWh;
-                    this.simTotalGen += gen_kWh; // MWh display logic in UI
+                if (weatherData) {
+                    // Find closest hour index
+                    const hourIndex = Math.floor(this.sunTime);
+                    if (weatherData.direct_normal_irradiance && weatherData.direct_normal_irradiance[hourIndex] !== undefined) {
+                        const dni = weatherData.direct_normal_irradiance[hourIndex];
+                        const diffuse = weatherData.diffuse_radiation[hourIndex];
+                        cloudCover = weatherData.cloudcover[hourIndex];
 
-                    // Load Logic
-                    const baseLoad = parseFloat(document.getElementById('input-load').value) || 500;
-                    const loadBoxes = this.objects.filter(o => o.type === 'load');
-                    const boxLoad = loadBoxes.reduce((sum, b) => sum + (b.units || 500), 0);
-                    const totalMonthlyLoad = baseLoad + boxLoad;
-                    const hourlyLoad = totalMonthlyLoad / 30 / 24; // Avg hourly load
-                    const load_kWh = hourlyLoad * dt_hours;
-
-                    // Net Meter Logic
-                    if (powerOutput > hourlyLoad) {
-                        this.simTotalExport += (powerOutput - hourlyLoad) * dt_hours;
-                    } else {
-                        this.simTotalImport += (hourlyLoad - powerOutput) * dt_hours;
-                    }
-
-                    // Update UI Counters
-                    document.getElementById('sim-day-gen').innerText = this.simDayGen.toFixed(1);
-                    document.getElementById('sim-total-gen').innerText = (this.simTotalGen / 1000).toFixed(3);
-
-                    // Update Right Panel if Meter Selected
-                    if (this.selectedObjectId) {
-                        const obj = this.objects.find(o => o.id === this.selectedObjectId);
-                        if (obj && (obj.subtype === 'meter_net' || obj.subtype === 'meter_gross')) {
-                            this.updateUI(); // Refresh to show new readings
-                        }
+                        // Simple Plane of Array (POA) Irradiance Model
+                        // POA = DNI * cos(AOI) + Diffuse
+                        // AOI (Angle of Incidence) depends on panel tilt/azimuth vs sun.
+                        // Simplified: assume panels are flat or optimal tilt.
+                        // Let's use a simplified factor based on elevation for now + cloud effect
+                        irradiance = (dni * Math.sin(elevation)) + diffuse;
                     }
                 } else {
-                    document.getElementById('sim-power').innerText = "0 kW";
+                    // Fallback: Clear Sky Model
+                    if (elevation > 0) {
+                        irradiance = 1000 * Math.sin(elevation); // Max 1000 W/m2
+                        // Add random cloud noise
+                        cloudCover = Math.random() * 20; // 0-20% random clouds
+                        irradiance *= (1 - cloudCover / 100);
+                    }
                 }
 
-                this.loop();
-                requestAnimationFrame(this.updatePlayback.bind(this));
+                if (irradiance < 0) irradiance = 0;
+
+                // 3. Calculate Power
+                const panels = this.objects.filter(o => o.type === 'panel');
+                const totalCap = panels.reduce((sum, p) => sum + p.watts, 0); // Watts
+
+                // Shadow Loss
+                const shadowLoss = this.calculateShadowLoss();
+
+                // Final Power Output
+                const efficiency = 0.18; // Panel efficiency (approx) or use rated watts directly
+                // Rated Watts is at STC (1000 W/m2). So Output = Rated * (Irradiance / 1000)
+                let powerOutput = totalCap * (irradiance / 1000) * (1 - shadowLoss);
+
+                if (powerOutput < 0) powerOutput = 0;
+
+                // Accumulate Energy
+                const gen_kWh = (powerOutput / 1000) * dt_hours;
+                this.simDayGen += gen_kWh;
+                this.simTotalGen += (gen_kWh / 1000); // MWh
+
+                // Load Logic
+                const baseLoad = parseFloat(document.getElementById('input-load').value) || 500;
+                const loadBoxes = this.objects.filter(o => o.type === 'load');
+                const boxLoad = loadBoxes.reduce((sum, b) => sum + (b.units || 500), 0);
+                const totalMonthlyLoad = baseLoad + boxLoad;
+                const hourlyLoad = totalMonthlyLoad / (30 * 24); // Average hourly load
+                const load_kWh = hourlyLoad * dt_hours;
+
+                // Net Meter
+                if (gen_kWh > load_kWh) {
+                    this.simTotalExport += (gen_kWh - load_kWh);
+                } else {
+                    this.simTotalImport += (load_kWh - gen_kWh);
+                }
+
+                // Update UI
+                document.getElementById('sim-power').innerText = (powerOutput / 1000).toFixed(2) + " kW";
+                document.getElementById('sim-day-gen').innerText = this.simDayGen.toFixed(1);
+                document.getElementById('sim-total-gen').innerText = this.simTotalGen.toFixed(3);
+
+                // Weather UI
+                const weatherIcon = cloudCover > 50 ? '<i class="fa-solid fa-cloud text-gray-400"></i>' : '<i class="fa-solid fa-sun text-yellow-400"></i>';
+                document.getElementById('sim-weather-icon').innerHTML = weatherIcon;
+                document.getElementById('sim-irradiance').innerText = Math.round(irradiance) + " W/m²";
+
+                // Update Meters if selected
+                if (this.selectedObjectId) {
+                    const obj = this.objects.find(o => o.id === this.selectedObjectId);
+                    if (obj && (obj.subtype === 'meter_gross' || obj.subtype === 'meter_net')) {
+                        this.updateUI();
+                    }
+                }
+
+                if (this.isPlaying) {
+                    requestAnimationFrame(this.updatePlayback.bind(this));
+                }
             }
 
             calculateYearlyShadowLoss() {
@@ -1384,11 +1813,230 @@
             resetMap() { this.objects = []; this.wires = []; this.saveState(); this.updateStats(); }
             bindEvents() { this.canvas.addEventListener('mousedown', e => this.onDown(e)); this.canvas.addEventListener('mousemove', e => this.onMove(e)); this.canvas.addEventListener('mouseup', e => this.onUp(e)); this.canvas.addEventListener('wheel', e => { this.scale = Math.max(5, Math.min(100, this.scale * (e.deltaY > 0 ? 0.9 : 1.1))); }); this.canvas.addEventListener('contextmenu', e => e.preventDefault()); }
             getWorldPos(e) { const r = this.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left - this.offsetX) / this.scale, y: (e.clientY - r.top - this.offsetY) / this.scale }; }
-            getResizeHandle(obj, wPos) { if (!obj) return null; const pad = 0.5; if (Math.abs(wPos.x - obj.x) < pad && Math.abs(wPos.y - obj.y) < pad) return 'tl'; if (Math.abs(wPos.x - (obj.x + obj.w)) < pad && Math.abs(wPos.y - obj.y) < pad) return 'tr'; if (Math.abs(wPos.x - obj.x) < pad && Math.abs(wPos.y - (obj.y + obj.h)) < pad) return 'bl'; if (Math.abs(wPos.x - (obj.x + obj.w)) < pad && Math.abs(wPos.y - (obj.y + obj.h)) < pad) return 'br'; return null; }
+            getResizeHandle(obj, wPos) { if (!obj) return null; const pad = 0.5; if (Math.abs(wPos.x - obj.x) < pad && Math.abs(wPos.y - obj.y) < pad) return 'tl'; if (Math.abs(wPos.x - (obj.x + obj.w)) < pad && Math.abs(wPos.y - obj.y) < pad) return 'tr'; if (Math.abs(wPos.x - obj.x) < pad && Math.abs(wPos.y - (obj.y + obj.h)) < pad) return 'bl'; if (Math.abs(wPos.x - (obj.x + obj.h)) < pad && Math.abs(wPos.y - (obj.y + obj.h)) < pad) return 'br'; return null; }
+
+            async handleContextAction(action) {
+                const { lat, lon } = this.contextPos;
+                if (action === 'import_ai') {
+                    await this.importWithGemini(lat, lon);
+                } else if (action === 'import_osm') {
+                    await this.importBuildingAt(lat, lon);
+                } else if (action === 'set_origin') {
+                    document.getElementById('input-lat').value = lat.toFixed(6);
+                    document.getElementById('input-lon').value = lon.toFixed(6);
+                    this.offsetX = this.canvas.width / 2;
+                    this.offsetY = this.canvas.height / 2;
+                    this.renderLayers();
+                    alert("Origin Set!");
+                }
+            }
+
+            async importWithGemini(lat, lon) {
+                const mapKey = document.getElementById('map-api-key').value;
+                const geminiKey = document.getElementById('gemini-api-key').value;
+                const mode = document.getElementById('gemini-mode').value;
+
+                if (!mapKey || !geminiKey) { alert("Please set both Google Maps and Gemini API Keys in Setup."); return; }
+
+                // 1. Fetch Static Map Image
+                const zoom = 20;
+                const size = 600; // 600x600 pixels
+                const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=${zoom}&size=${size}x${size}&maptype=satellite&key=${mapKey}`;
+
+                try {
+                    document.body.style.cursor = 'wait';
+                    const imgResp = await fetch(mapUrl);
+                    const blob = await imgResp.blob();
+                    const base64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(blob);
+                    });
+
+                    // 2. Call Gemini API
+                    const prompt = `Analyze this satellite image. Identify the building at the exact center. Return a JSON object with a 'polygons' array. Each item should have 'type' ('building' or 'obstacle') and 'points' (array of {x, y} where x,y are percentage coordinates 0-100 relative to image width/height). ${mode === 'surroundings' ? 'Include surrounding trees/obstacles.' : 'Ignore surroundings, focus on the main building.'} Output ONLY raw JSON.`;
+
+                    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+                    const geminiResp = await fetch(geminiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [
+                                    { text: prompt },
+                                    { inline_data: { mime_type: "image/png", data: base64 } }
+                                ]
+                            }]
+                        })
+                    });
+
+                    const geminiData = await geminiResp.json();
+                    document.body.style.cursor = 'default';
+
+                    if (!geminiData.candidates || !geminiData.candidates[0].content) {
+                        console.error(geminiData);
+                        alert("Gemini could not analyze the image.");
+                        return;
+                    }
+
+                    const text = geminiData.candidates[0].content.parts[0].text;
+                    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const result = JSON.parse(jsonStr);
+
+                    // 3. Convert to World Objects
+                    const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, 20);
+                    const imgWidthMeters = size * metersPerPixel;
+                    const imgHeightMeters = size * metersPerPixel;
+
+                    // Calculate world pos of click (center of image)
+                    const centerLat = parseFloat(document.getElementById('input-lat').value);
+                    const centerLon = parseFloat(document.getElementById('input-lon').value);
+                    const latMeters = 111320;
+                    const lonMeters = 40075000 * Math.cos(centerLat * Math.PI / 180) / 360;
+
+                    const dy = -(lat - centerLat) * latMeters;
+                    const dx = (lon - centerLon) * lonMeters;
+
+                    let count = 0;
+                    if (result.polygons) {
+                        result.polygons.forEach(poly => {
+                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                            poly.points.forEach(p => {
+                                const xm = (p.x - 50) / 100 * imgWidthMeters;
+                                const ym = (p.y - 50) / 100 * imgHeightMeters;
+                                if (xm < minX) minX = xm;
+                                if (ym < minY) minY = ym;
+                                if (xm > maxX) maxX = xm;
+                                if (ym > maxY) maxY = ym;
+                            });
+
+                            const w = maxX - minX;
+                            const h = maxY - minY;
+                            const cx = minX + w / 2;
+                            const cy = minY + h / 2;
+
+                            const worldX = dx + cx;
+                            const worldY = dy + cy;
+
+                            const id = 'ai_' + Math.random().toString(36).substr(2, 9);
+                            this.objects.push({
+                                id: id,
+                                type: poly.type === 'building' ? 'structure' : 'obstacle',
+                                subtype: poly.type === 'building' ? 'building' : 'tree',
+                                x: worldX - w / 2,
+                                y: worldY - h / 2,
+                                w: w,
+                                h: h,
+                                h_z: poly.type === 'building' ? 6 : 4,
+                                color: poly.type === 'building' ? COLORS.building : COLORS.tree,
+                                rotation: 0
+                            });
+                            count++;
+                        });
+
+                        this.saveState();
+                        this.renderLayers();
+                        alert(`AI Imported ${count} objects!`);
+                    }
+
+                } catch (e) {
+                    console.error(e);
+                    document.body.style.cursor = 'default';
+                    alert("AI Import Failed: " + e.message);
+                }
+            }
+
+            async importBuildingAt(lat, lon) {
+                const radius = 10; // meters
+                const query = `[out:json];(way["building"](around:${radius},${lat},${lon}););out body;>;out skel qt;`;
+                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+                try {
+                    document.body.style.cursor = 'wait';
+                    const resp = await fetch(url);
+                    const data = await resp.json();
+                    document.body.style.cursor = 'default';
+
+                    if (!data.elements || data.elements.length === 0) {
+                        alert("No building found at this location.");
+                        return;
+                    }
+
+                    const nodes = {};
+                    data.elements.forEach(el => {
+                        if (el.type === 'node') nodes[el.id] = { lat: el.lat, lon: el.lon };
+                    });
+
+                    let imported = false;
+                    const centerLat = parseFloat(document.getElementById('input-lat').value);
+                    const centerLon = parseFloat(document.getElementById('input-lon').value);
+                    const latMeters = 111320;
+                    const lonMeters = 40075000 * Math.cos(centerLat * Math.PI / 180) / 360;
+
+                    data.elements.forEach(el => {
+                        if (el.type === 'way' && el.tags && el.tags.building) {
+                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                            el.nodes.forEach(nid => {
+                                const node = nodes[nid];
+                                if (node) {
+                                    const dy = -(node.lat - centerLat) * latMeters;
+                                    const dx = (node.lon - centerLon) * lonMeters;
+                                    if (dx < minX) minX = dx;
+                                    if (dy < minY) minY = dy;
+                                    if (dx > maxX) maxX = dx;
+                                    if (dy > maxY) maxY = dy;
+                                }
+                            });
+
+                            if (minX !== Infinity) {
+                                const width = maxX - minX;
+                                const height = maxY - minY;
+                                let levels = 1;
+                                if (el.tags['building:levels']) levels = parseInt(el.tags['building:levels']);
+                                else if (el.tags.height) levels = parseFloat(el.tags.height) / 3;
+                                const h_z = levels * 3;
+
+                                const id = 'bldg_' + el.id;
+                                if (!this.objects.find(o => o.id === id)) {
+                                    this.objects.push({
+                                        id: id,
+                                        type: 'structure',
+                                        subtype: 'building',
+                                        x: minX,
+                                        y: minY,
+                                        w: width,
+                                        h: height,
+                                        h_z: h_z,
+                                        color: COLORS.building,
+                                        rotation: 0
+                                    });
+                                    imported = true;
+                                } else {
+                                    // alert("Building already imported."); // Removed this alert as it can be annoying
+                                    imported = true;
+                                }
+                            }
+                        }
+                    });
+
+                    if (imported) {
+                        this.saveState();
+                        this.renderLayers();
+                        this.setMode('select');
+                        alert("Building Imported!");
+                    }
+
+                } catch (e) {
+                    console.error(e);
+                    document.body.style.cursor = 'default';
+                    alert("Import failed. Check internet.");
+                }
+            }
 
             onDown(e) {
                 const w = this.getWorldPos(e);
                 if (e.button === 2) { this.isPanning = true; this.lastPan = { x: e.clientX, y: e.clientY }; return; }
+
                 if (this.mode === 'place' && COMPONENTS[this.selectedToolId]?.type === 'panel') { this.arrayStart = w; return; }
                 if (this.mode === 'select') {
                     if (this.selectedObjectId) {
@@ -1826,7 +2474,47 @@
 
             loop() { if (!this.isRunning) return; this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.ctx.fillStyle = COLORS.bg; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); if (this.showGrid) this.drawGrid(); this.drawRulers(); this.drawShadows(); this.objects.sort((a, b) => (a.h_z - b.h_z) || (a.y - b.y)).forEach(o => this.drawObject(o)); this.drawShadowsOnObjects(); this.drawWires(); this.drawOverlays(); this.drawSunPath(); requestAnimationFrame(() => this.loop()); }
             drawRulers() { this.ctx.fillStyle = '#374151'; this.ctx.fillRect(0, 0, this.canvas.width, 20); this.ctx.fillRect(0, 0, 20, this.canvas.height); this.ctx.strokeStyle = '#6b7280'; this.ctx.fillStyle = '#9ca3af'; this.ctx.font = '10px monospace'; this.ctx.textAlign = 'center'; const startX = Math.floor(-this.offsetX / this.scale); const endX = Math.ceil((this.canvas.width - this.offsetX) / this.scale); this.ctx.beginPath(); for (let i = startX; i <= endX; i++) { const x = i * this.scale + this.offsetX; if (i % 5 === 0) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, 15); this.ctx.fillText(i, x, 12); } else { this.ctx.moveTo(x, 15); this.ctx.lineTo(x, 20); } } this.ctx.stroke(); const startY = Math.floor(-this.offsetY / this.scale); const endY = Math.ceil((this.canvas.height - this.offsetY) / this.scale); this.ctx.beginPath(); this.ctx.textAlign = 'left'; for (let i = startY; i <= endY; i++) { const y = i * this.scale + this.offsetY; if (i % 5 === 0) { this.ctx.moveTo(0, y); this.ctx.lineTo(15, y); this.ctx.save(); this.ctx.translate(2, y - 2); this.ctx.rotate(-Math.PI / 2); this.ctx.fillText(i, 0, 10); this.ctx.restore(); } else { this.ctx.moveTo(15, y); this.ctx.lineTo(20, y); } } this.ctx.stroke(); }
-            drawGrid() { this.ctx.strokeStyle = COLORS.grid; this.ctx.lineWidth = 1; this.ctx.beginPath(); for (let x = this.offsetX % this.scale; x < this.canvas.width; x += this.scale) { this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); } for (let y = this.offsetY % this.scale; y < this.canvas.height; y += this.scale) { this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); } this.ctx.stroke(); }
+            drawGrid() {
+                // Draw Map Overlay if available
+                if (this.mapImage) {
+                    const cx = this.canvas.width / 2;
+                    const cy = this.canvas.height / 2;
+
+                    // Calculate scale factor
+                    // mapMetersPerPixel is real world meters per pixel of the image.
+                    // this.scale is pixels per meter on our canvas.
+                    // So 1 meter = this.scale pixels.
+                    // Image 1 pixel = mapMetersPerPixel meters = mapMetersPerPixel * this.scale canvas pixels.
+                    const imgScale = this.mapMetersPerPixel * this.scale;
+
+                    const w = this.mapImage.width * imgScale;
+                    const h = this.mapImage.height * imgScale;
+
+                    // Draw centered at 0,0 world coords
+                    // World 0,0 is at screen (this.offsetX, this.offsetY)
+                    const x = this.offsetX - w / 2;
+                    const y = this.offsetY - h / 2;
+
+                    this.ctx.drawImage(this.mapImage, x, y, w, h);
+
+                    // Dim the map slightly
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                    this.ctx.fillRect(x, y, w, h);
+                }
+
+                this.ctx.strokeStyle = COLORS.grid;
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                for (let x = this.offsetX % this.scale; x < this.canvas.width; x += this.scale) {
+                    this.ctx.moveTo(x, 0);
+                    this.ctx.lineTo(x, this.canvas.height);
+                }
+                for (let y = this.offsetY % this.scale; y < this.canvas.height; y += this.scale) {
+                    this.ctx.moveTo(0, y);
+                    this.ctx.lineTo(this.canvas.width, y);
+                }
+                this.ctx.stroke();
+            }
             drawSunPath() { const cx = this.canvas.width / 2; const cy = this.canvas.height / 2; const r = Math.min(this.canvas.width, this.canvas.height) * 0.4; this.ctx.strokeStyle = 'rgba(234, 179, 8, 0.1)'; this.ctx.lineWidth = 2; this.ctx.setLineDash([10, 10]); this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI, false); this.ctx.stroke(); this.ctx.setLineDash([]); const angle = ((this.sunTime - 6) / 12) * Math.PI; const sunX = cx + r * Math.cos(angle); const sunY = cy + r * Math.sin(angle); this.ctx.fillStyle = '#fbbf24'; this.ctx.shadowColor = '#fbbf24'; this.ctx.shadowBlur = 20; this.ctx.beginPath(); this.ctx.arc(sunX, sunY, 8, 0, Math.PI * 2); this.ctx.fill(); this.ctx.shadowBlur = 0; }
             getShadowVector() { const angle = ((this.sunTime - 6) / 12) * Math.PI + (this.orientation * Math.PI / 180); const elevation = Math.sin(((this.sunTime - 6) / 12) * Math.PI); if (elevation < 0.1) return null; const len = Math.min(3.0, (1 / Math.max(0.15, elevation)) * 0.7); return { x: -Math.cos(angle) * len, y: -Math.sin(angle) * len }; }
 
