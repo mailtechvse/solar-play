@@ -1,1 +1,16 @@
 node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.pem
+.supabase/
+# Keep solar-board.html copy as backup reference
+solar-board copy.html

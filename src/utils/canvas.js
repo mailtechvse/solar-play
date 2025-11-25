@@ -1,0 +1,1186 @@
+import { SunCalc } from "./suncalc";
+
+/**
+ * Color scheme for canvas rendering
+ * Can be switched between dark, light, and sepia modes
+ */
+export const COLORS = {
+  dark: {
+    grid: "#374151",
+    bg: "#1f2937",
+    wire_dc: "#ef4444",
+    wire_ac: "#eab308",
+    earth: "#16a34a",
+    roof: "#6b7280",
+    tinshed: "#93c5fd",
+    obstacle: "rgba(239, 68, 68, 0.6)",
+    shadow: "rgba(0, 0, 0, 0.5)",
+    highlight: "rgba(59, 130, 246, 0.4)",
+    tree: "rgba(22, 163, 74, 0.8)",
+    building: "#475569",
+  },
+  light: {
+    grid: "#e5e7eb",
+    bg: "#f9fafb",
+    wire_dc: "#dc2626",
+    wire_ac: "#d97706",
+    earth: "#15803d",
+    roof: "#9ca3af",
+    tinshed: "#bfdbfe",
+    obstacle: "rgba(239, 68, 68, 0.4)",
+    shadow: "rgba(0, 0, 0, 0.2)",
+    highlight: "rgba(59, 130, 246, 0.4)",
+    tree: "rgba(22, 163, 74, 0.6)",
+    building: "#64748b",
+  },
+  sepia: {
+    grid: "#d6cbb8",
+    bg: "#f5f0e6",
+    wire_dc: "#b91c1c",
+    wire_ac: "#b45309",
+    earth: "#15803d",
+    roof: "#a8a29e",
+    tinshed: "#dbeafe",
+    obstacle: "rgba(185, 28, 28, 0.4)",
+    shadow: "rgba(66, 32, 6, 0.2)",
+    highlight: "rgba(234, 179, 8, 0.4)",
+    tree: "rgba(21, 128, 61, 0.6)",
+    building: "#78716c",
+  },
+};
+
+let currentTheme = COLORS.dark;
+
+/**
+ * Switch color theme
+ */
+export function setColorTheme(theme) {
+  currentTheme = COLORS[theme] || COLORS.dark;
+}
+
+/**
+ * Main canvas rendering function
+ * Handles all drawing of grid, objects, wires, shadows, and sun path
+ */
+export function renderCanvas(canvas, ctx, state) {
+  const {
+    scale,
+    offsetX,
+    offsetY,
+    showGrid,
+    objects,
+    wires,
+    selectedObjectId,
+    additionalSelectedIds,
+    sunTime,
+    orientation,
+    cableMode,
+    lat,
+    lon,
+  } = state;
+
+  // Clear canvas
+  ctx.fillStyle = currentTheme.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Save context for transformations
+  ctx.save();
+
+  // Apply view transformations (pan and zoom)
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  // Draw grid
+  if (showGrid) {
+    drawGrid(ctx, canvas, scale, offsetX, offsetY);
+  }
+
+  // Draw map overlay if available (from imported buildings)
+  if (state.mapImage && state.mapMetersPerPixel) {
+    drawMapOverlay(ctx, state.mapImage, state.mapMetersPerPixel, canvas, scale, offsetX, offsetY);
+  }
+
+  // Draw wires first (below objects for proper layering)
+  wires.forEach((wire) => {
+    drawWire(ctx, wire, objects, cableMode);
+  });
+
+  // Sort objects by h_z (height) for proper depth rendering
+  const sortedObjects = [...objects].sort((a, b) => (a.h_z || 0) - (b.h_z || 0));
+  const shadowVector = getShadowVector(sunTime, lat, lon, orientation);
+
+  // Calculate effective heights for all objects (considering stacking)
+  const effectiveHeights = new Map();
+  sortedObjects.forEach((obj) => {
+    effectiveHeights.set(obj.id, calculateEffectiveHeight(obj, objects, shadowVector));
+  });
+
+  // First pass: Draw all shadows (so they appear behind objects of same/greater height)
+  if (shadowVector) {
+    sortedObjects.forEach((obj) => {
+      const effectiveHeight = effectiveHeights.get(obj.id) || obj.h_z;
+      drawShadow(ctx, obj, shadowVector, effectiveHeight);
+    });
+  }
+
+  // Second pass: Draw all objects (from lowest to highest)
+  sortedObjects.forEach((obj) => {
+    const isSelected = obj.id === selectedObjectId || (additionalSelectedIds || []).includes(obj.id);
+    drawObject(ctx, obj, isSelected);
+  });
+
+  // Draw sun direction indicator on the grid
+  if (shadowVector && sunTime >= 6 && sunTime <= 18) {
+    drawSunDirection(ctx, shadowVector, canvas, scale, offsetX, offsetY);
+  }
+
+  // Draw measurement/temp visualization if in measure mode
+  if (state.measureStart && state.measureEnd) {
+    drawMeasurement(ctx, state.measureStart, state.measureEnd);
+  }
+
+  // Draw in-progress drawing
+  if (state.drawingMode && state.drawingPoints && state.drawingPoints.length > 0) {
+    drawInProgressDrawing(ctx, state.drawingMode, state.drawingPoints, state.drawingPreview);
+  }
+
+  // Draw alignment guides (dynamic alignment)
+  if (state.alignmentGuides && state.alignmentGuides.length > 0) {
+    drawAlignmentGuides(ctx, state.alignmentGuides);
+  }
+
+  // Draw selection box
+  if (state.selectionBox) {
+    drawSelectionBox(ctx, state.selectionBox);
+  }
+
+  // Draw resize handles for selected object
+  if (selectedObjectId) {
+    const selectedObj = objects.find(o => o.id === selectedObjectId);
+    if (selectedObj) {
+      drawResizeHandles(ctx, selectedObj);
+    }
+  }
+
+  // Restore context
+  ctx.restore();
+
+  // Draw UI overlays (compass, stats, sun path) on screen space (AFTER restore)
+  if (state.showCompass) {
+    drawCompass(canvas, ctx, orientation);
+  }
+
+  // Draw sun path indicator in screen space
+  if (shadowVector && sunTime >= 6 && sunTime <= 18) {
+    drawSunPath(ctx, shadowVector, canvas, scale, offsetX, offsetY);
+  }
+
+  // Draw rulers on top and left
+  drawRulers(canvas, ctx, scale, offsetX, offsetY);
+}
+
+/**
+ * Draw alignment guides (dashed lines)
+ */
+function drawAlignmentGuides(ctx, guides) {
+  ctx.save();
+  ctx.strokeStyle = "#3b82f6"; // Blue
+  ctx.lineWidth = 0.05;
+  ctx.setLineDash([0.2, 0.2]);
+
+  guides.forEach(guide => {
+    ctx.beginPath();
+    ctx.moveTo(guide.x1, guide.y1);
+    ctx.lineTo(guide.x2, guide.y2);
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+/**
+ * Draw resize handles for selected object
+ * 8 handles: 4 corners + 4 edges
+ */
+function drawResizeHandles(ctx, obj) {
+  if (!obj || !obj.w || !obj.h) return;
+
+  ctx.save();
+
+  const handleSize = 0.3; // Size in meters
+  const x = obj.x;
+  const y = obj.y;
+  const w = obj.w;
+  const h = obj.h;
+
+  // Define handle positions
+  const handles = [
+    { x: x, y: y, type: 'nw' },                    // Top-left
+    { x: x + w / 2, y: y, type: 'n' },            // Top-center
+    { x: x + w, y: y, type: 'ne' },               // Top-right
+    { x: x + w, y: y + h / 2, type: 'e' },        // Middle-right
+    { x: x + w, y: y + h, type: 'se' },           // Bottom-right
+    { x: x + w / 2, y: y + h, type: 's' },        // Bottom-center
+    { x: x, y: y + h, type: 'sw' },               // Bottom-left
+    { x: x, y: y + h / 2, type: 'w' },            // Middle-left
+  ];
+
+  // Draw each handle
+  handles.forEach(handle => {
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 0.05;
+
+    ctx.fillRect(
+      handle.x - handleSize / 2,
+      handle.y - handleSize / 2,
+      handleSize,
+      handleSize
+    );
+    ctx.strokeRect(
+      handle.x - handleSize / 2,
+      handle.y - handleSize / 2,
+      handleSize,
+      handleSize
+    );
+  });
+
+  ctx.restore();
+}
+
+/**
+ * Draw grid with 1m spacing
+ */
+function drawGrid(ctx, canvas, scale, offsetX, offsetY) {
+  ctx.strokeStyle = currentTheme.grid;
+  ctx.lineWidth = 0.02;
+  ctx.globalAlpha = 0.5;
+
+  const gridSize = 1; // 1 meter
+  const startX = Math.floor(-offsetX / scale / gridSize) * gridSize;
+  const startY = Math.floor(-offsetY / scale / gridSize) * gridSize;
+  const endX = startX + canvas.width / scale / gridSize + 2;
+  const endY = startY + canvas.height / scale / gridSize + 2;
+
+  // Vertical lines
+  for (let x = startX; x < endX; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, startY);
+    ctx.lineTo(x, endY);
+    ctx.stroke();
+  }
+
+  // Horizontal lines
+  for (let y = startY; y < endY; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(startX, y);
+    ctx.lineTo(endX, y);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Draw individual object with proper styling based on type
+ */
+function drawObject(ctx, obj, isSelected) {
+  ctx.save();
+
+  // Apply rotation if specified (only for rectangles for now)
+  if (obj.rotation && obj.type !== "polygon") {
+    ctx.translate(obj.x + obj.w / 2, obj.y + obj.h / 2);
+    ctx.rotate((obj.rotation * Math.PI) / 180);
+    ctx.translate(-(obj.x + obj.w / 2), -(obj.y + obj.h / 2));
+  }
+
+  // Determine color based on type
+  let fillColor = obj.color || "#1e3a8a";
+
+  const points = obj.points || obj.vertices;
+
+  if (obj.type === "polygon" && points && points.length > 0) {
+    // Draw Polygon
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.closePath();
+
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+
+    // Draw border
+    ctx.strokeStyle = isSelected ? "#3b82f6" : adjustColor(fillColor, -40);
+    ctx.lineWidth = isSelected ? 0.08 : 0.02;
+    ctx.stroke();
+
+    // Add selection highlight
+    if (isSelected) {
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+      ctx.lineWidth = 0.15;
+      ctx.stroke();
+    }
+  } else {
+    // Draw Rectangle (default)
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+
+    // Draw border - thicker if selected
+    ctx.strokeStyle = isSelected ? "#3b82f6" : adjustColor(fillColor, -40);
+    ctx.lineWidth = isSelected ? 0.08 : 0.02;
+    ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+
+    // Add selection highlight
+    if (isSelected) {
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+      ctx.lineWidth = 0.15;
+      ctx.strokeRect(obj.x - 0.1, obj.y - 0.1, obj.w + 0.2, obj.h + 0.2);
+    }
+  }
+
+  // Draw type-specific icons/content (only for rects or center of poly)
+  if (obj.type !== "polygon") {
+    drawObjectContent(ctx, obj);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Draw object-specific content (labels, icons, specs)
+ */
+function drawObjectContent(ctx, obj) {
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const centerX = obj.x + obj.w / 2;
+  const centerY = obj.y + obj.h / 2;
+
+  // Draw label if available
+  if (obj.label) {
+    ctx.font = "bold 0.15px Arial";
+    ctx.fillText(obj.label, centerX, centerY - 0.2);
+  }
+
+  // Draw type-specific specs
+  if (obj.type === "panel" && obj.watts) {
+    ctx.font = "0.12px Arial";
+    ctx.fillText(`${obj.watts}W`, centerX, centerY + 0.1);
+  } else if (obj.type === "inverter" && obj.capKw) {
+    ctx.font = "0.12px Arial";
+    ctx.fillText(`${obj.capKw}kW`, centerX, centerY + 0.1);
+  } else if (obj.type === "battery" && obj.capKwh) {
+    ctx.font = "0.12px Arial";
+    ctx.fillText(`${obj.capKwh}kWh`, centerX, centerY + 0.1);
+  } else if (obj.type === "load" && obj.units) {
+    ctx.font = "0.12px Arial";
+    ctx.fillText(`${obj.units}U`, centerX, centerY + 0.1);
+  }
+}
+
+/**
+ * Draw wire connections between objects
+ * Supports both straight and orthogonal routing
+ */
+function drawWire(ctx, wire, objects, cableMode = "straight") {
+  const fromObj = objects.find((o) => o.id === wire.from);
+  const toObj = objects.find((o) => o.id === wire.to);
+
+  if (!fromObj || !toObj) return;
+
+  const fromX = fromObj.x + fromObj.w / 2;
+  const fromY = fromObj.y + fromObj.h / 2;
+  const toX = toObj.x + toObj.w / 2;
+  const toY = toObj.y + toObj.h / 2;
+
+  // Wire color based on type
+  const wireColors = {
+    dc: currentTheme.wire_dc,
+    ac: currentTheme.wire_ac,
+    earth: currentTheme.earth,
+  };
+
+  ctx.strokeStyle = wireColors[wire.type] || currentTheme.wire_dc;
+  ctx.lineWidth = 0.08;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+
+  if (cableMode === "ortho" && wire.path && wire.path.length > 0) {
+    // Draw orthogonal path with waypoints
+    wire.path.forEach((point) => {
+      ctx.lineTo(point.x, point.y);
+    });
+  }
+
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  // Draw small circles at connection points
+  ctx.fillStyle = wireColors[wire.type] || currentTheme.wire_dc;
+  ctx.beginPath();
+  ctx.arc(fromX, fromY, 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(toX, toY, 0.08, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Calculate effective height of an object considering objects beneath it
+ * If an object is placed on top of another object, its height should be relative
+ * to the base object's height
+ */
+function calculateEffectiveHeight(obj, allObjects, shadowVector) {
+  if (!obj || !obj.h_z) return obj.h_z || 0;
+
+  // Find if this object is on top of another object
+  const objCenterX = obj.x + obj.w / 2;
+  const objCenterY = obj.y + obj.h / 2;
+
+  let baseHeight = 0;
+  let foundBase = false;
+
+  // Check all other objects to see if this object is on top of any
+  for (const other of allObjects) {
+    if (other.id === obj.id) continue;
+    if (!other.h_z || other.h_z === 0) continue;
+
+    // Ignore exact duplicates to prevent accidental double-height shadows
+    if (Math.abs(other.x - obj.x) < 0.01 &&
+      Math.abs(other.y - obj.y) < 0.01 &&
+      Math.abs(other.w - obj.w) < 0.01 &&
+      Math.abs(other.h - obj.h) < 0.01) continue;
+
+    // Check if object's center is within the other object's bounds
+    const isWithinBounds =
+      objCenterX >= other.x &&
+      objCenterX <= other.x + other.w &&
+      objCenterY >= other.y &&
+      objCenterY <= other.y + other.h;
+
+    if (isWithinBounds) {
+      // Object is on top of this base object
+      // Use the higher base if multiple objects are stacked
+      if (other.h_z > baseHeight) {
+        baseHeight = other.h_z;
+        foundBase = true;
+      }
+    }
+  }
+
+  if (!foundBase) {
+    // Object is on ground, use its own height
+    return obj.h_z;
+  }
+
+  // Object is on top of another object
+  // Check if it's at the edge or center
+  if (!shadowVector) {
+    return baseHeight + obj.h_z;
+  }
+
+  // Calculate shadow distance for the base object
+  const baseShadowDist = Math.sqrt(
+    Math.pow(shadowVector.x * baseHeight, 2) +
+    Math.pow(shadowVector.y * baseHeight, 2)
+  );
+
+  // Find the base object again to check edge distance
+  for (const other of allObjects) {
+    if (other.id === obj.id) continue;
+    if (!other.h_z || other.h_z === 0) continue;
+
+    const isWithinBounds =
+      objCenterX >= other.x &&
+      objCenterX <= other.x + other.w &&
+      objCenterY >= other.y &&
+      objCenterY <= other.y + other.h;
+
+    if (isWithinBounds && other.h_z === baseHeight) {
+      // Calculate distance from object center to nearest edge of base
+      const distToLeftEdge = Math.abs(objCenterX - other.x);
+      const distToRightEdge = Math.abs(objCenterX - (other.x + other.w));
+      const distToTopEdge = Math.abs(objCenterY - other.y);
+      const distToBottomEdge = Math.abs(objCenterY - (other.y + other.h));
+
+      const minEdgeDist = Math.min(
+        distToLeftEdge,
+        distToRightEdge,
+        distToTopEdge,
+        distToBottomEdge
+      );
+
+      // If object is at edge and distance < base shadow distance
+      // Then shadow should add up
+      if (minEdgeDist < baseShadowDist) {
+        return baseHeight + obj.h_z;
+      } else {
+        // Object is in center, shadow only adds if it extends beyond base
+        return baseHeight + obj.h_z;
+      }
+    }
+  }
+
+  return baseHeight + obj.h_z;
+}
+
+/**
+ * Draw shadows cast by objects based on sun position
+ */
+
+
+// Helper to draw shadow with correct rotation handling
+function drawShadow(ctx, obj, shadowVector, effectiveHeight = null) {
+  const height = effectiveHeight !== null ? effectiveHeight : obj.h_z;
+  if (!height || height === 0) return;
+
+  ctx.save();
+
+  const isRoof = obj.relative_h && obj.relative_h > 0;
+  ctx.globalAlpha = isRoof ? 0.5 : 0.7;
+  ctx.fillStyle = currentTheme.shadow;
+
+  // Calculate world space offset
+  const worldDx = shadowVector.x * height;
+  const worldDy = shadowVector.y * height;
+
+  if (obj.type === "polygon" && obj.vertices && obj.vertices.length > 0) {
+    drawShadowPolygon(ctx, obj.x, obj.y, obj.vertices, worldDx, worldDy);
+  } else {
+    // For rectangles, we need to handle rotation carefully.
+    // We'll calculate the 4 corners in WORLD space, then project them.
+
+    const cx = obj.x + obj.w / 2;
+    const cy = obj.y + obj.h / 2;
+    const rad = ((obj.rotation || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    // Helper to rotate point around center
+    const rotatePoint = (x, y) => ({
+      x: cx + (x - cx) * cos - (y - cy) * sin,
+      y: cy + (x - cx) * sin + (y - cy) * cos
+    });
+
+    // Base corners in world space
+    const p1 = rotatePoint(obj.x, obj.y); // TL
+    const p2 = rotatePoint(obj.x + obj.w, obj.y); // TR
+    const p3 = rotatePoint(obj.x + obj.w, obj.y + obj.h); // BR
+    const p4 = rotatePoint(obj.x, obj.y + obj.h); // BL
+
+    // Projected corners
+    const pp1 = { x: p1.x + worldDx, y: p1.y + worldDy };
+    const pp2 = { x: p2.x + worldDx, y: p2.y + worldDy };
+    const pp3 = { x: p3.x + worldDx, y: p3.y + worldDy };
+    const pp4 = { x: p4.x + worldDx, y: p4.y + worldDy };
+
+    // Draw the "Cap" (Projected Top)
+    ctx.beginPath();
+    ctx.moveTo(pp1.x, pp1.y);
+    ctx.lineTo(pp2.x, pp2.y);
+    ctx.lineTo(pp3.x, pp3.y);
+    ctx.lineTo(pp4.x, pp4.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw the convex hull of the extrusion (connecting sides)
+    // We can just draw the 4 connecting quads. The internal ones will be covered or fill same area.
+    // To be cleaner, we should only draw the silhouette, but drawing all 4 quads is easier and correct for filling.
+
+    // Side 1: p1-p2
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(pp2.x, pp2.y);
+    ctx.lineTo(pp1.x, pp1.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Side 2: p2-p3
+    ctx.beginPath();
+    ctx.moveTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(pp3.x, pp3.y);
+    ctx.lineTo(pp2.x, pp2.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Side 3: p3-p4
+    ctx.beginPath();
+    ctx.moveTo(p3.x, p3.y);
+    ctx.lineTo(p4.x, p4.y);
+    ctx.lineTo(pp4.x, pp4.y);
+    ctx.lineTo(pp3.x, pp3.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Side 4: p4-p1
+    ctx.beginPath();
+    ctx.moveTo(p4.x, p4.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.lineTo(pp1.x, pp1.y);
+    ctx.lineTo(pp4.x, pp4.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Draw shadow for a polygon object
+ * Projects polygon shadow based on offset
+ */
+function drawShadowPolygon(ctx, baseX, baseY, vertices, dx, dy) {
+  // Draw the projected top face ("cap")
+  ctx.beginPath();
+  for (let i = 0; i < vertices.length; i++) {
+    const v = vertices[i];
+    const x = baseX + v.x + dx;
+    const y = baseY + v.y + dy;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw connecting sides (extrusion)
+  // For each edge of the polygon, draw a quad connecting it to its projected edge
+  for (let i = 0; i < vertices.length; i++) {
+    const v1 = vertices[i];
+    const v2 = vertices[(i + 1) % vertices.length];
+
+    const b1 = { x: baseX + v1.x, y: baseY + v1.y };
+    const b2 = { x: baseX + v2.x, y: baseY + v2.y };
+    const t1 = { x: baseX + v1.x + dx, y: baseY + v1.y + dy };
+    const t2 = { x: baseX + v2.x + dx, y: baseY + v2.y + dy };
+
+    ctx.beginPath();
+    ctx.moveTo(b1.x, b1.y);
+    ctx.lineTo(b2.x, b2.y);
+    ctx.lineTo(t2.x, t2.y);
+    ctx.lineTo(t1.x, t1.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/**
+ * Calculate shadow vector based on sun position
+ * Returns {x, y} representing shadow direction
+ * Based on solar-board.html implementation
+ */
+export function getShadowVector(sunTime, lat = 28.6, lon = 77.2, orientation = 0) {
+  // Exact implementation from solar-board.html
+  const angle = ((sunTime - 6) / 12) * Math.PI + (orientation * Math.PI / 180);
+  const elevation = Math.sin(((sunTime - 6) / 12) * Math.PI);
+
+  if (elevation < 0.1) return null;
+
+  // Use solar-board.html formula for shadow length
+  const len = Math.min(3.0, (1 / Math.max(0.15, elevation)) * 0.7);
+
+  return {
+    x: -Math.cos(angle) * len,
+    y: -Math.sin(angle) * len,
+  };
+}
+
+/**
+ * Draw sun path visualization
+ * Shows the sun's position and path arc during the day
+ */
+function drawSunPath(ctx, shadowVector, canvas, scale, offsetX, offsetY) {
+  ctx.save();
+
+  // Fixed screen space position (bottom left corner)
+  const padding = 20;
+  const cx = padding + 60;
+  const cy = canvas.height - padding - 20;
+  const r = 40;
+
+  // Draw sun path arc (semi-circle from 6 AM to 6 PM)
+  ctx.strokeStyle = "rgba(234, 179, 8, 0.3)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, 0, false);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Calculate sun position on the arc based on time of day (6 AM to 6 PM = 0 to Math.PI)
+  // shadowVector.angle represents the direction, we need to map it to position on arc
+  const angle = Math.atan2(shadowVector.y, shadowVector.x);
+  // Map angle to arc position (6 AM = Math.PI, 6 PM = 0)
+  const sunX = cx + Math.cos(angle) * r;
+  const sunY = cy - Math.sin(angle) * r;
+
+  // Draw sun as a yellow circle with glow effect (fixed screen space)
+  ctx.fillStyle = "#fbbf24";
+  ctx.shadowColor = "rgba(251, 191, 36, 0.8)";
+  ctx.shadowBlur = 15;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Draw time labels
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "9px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("6am", cx - r - 5, cy + 12);
+  ctx.fillText("6pm", cx + r + 5, cy + 12);
+  ctx.fillText("Noon", cx, cy - r - 8);
+
+  ctx.restore();
+}
+
+/**
+ * Draw compass for orientation reference
+ */
+function drawCompass(canvas, ctx, orientation = 0) {
+  ctx.save();
+
+  const x = canvas.width - 80;
+  const y = canvas.height - 80;
+  const radius = 30;
+
+  ctx.translate(x, y);
+  ctx.rotate((orientation * Math.PI) / 180);
+
+  // Draw compass circle
+  ctx.strokeStyle = "#666666";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Draw cardinal directions
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.fillText("N", 0, -radius + 8);
+  ctx.fillText("S", 0, radius - 8);
+  ctx.fillText("E", radius - 8, 0);
+  ctx.fillText("W", -radius + 8, 0);
+
+  // Draw north needle
+  ctx.strokeStyle = "#ff0000";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -radius + 5);
+  ctx.lineTo(0, -10);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/**
+ * Draw measurement visualization (distance tool)
+ */
+function drawMeasurement(ctx, start, end) {
+  if (!start || !end) return;
+
+  ctx.save();
+
+  // Draw line
+  ctx.strokeStyle = "rgba(59, 130, 246, 0.8)";
+  ctx.lineWidth = 0.1;
+  ctx.lineDash = [0.2, 0.1];
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+  ctx.lineDash = [];
+
+  // Draw points
+  ctx.fillStyle = "#3b82f6";
+  ctx.beginPath();
+  ctx.arc(start.x, start.y, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(end.x, end.y, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw distance label
+  const distance = Math.sqrt(
+    Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+  );
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 0.15px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
+  ctx.fillText(`${distance.toFixed(2)}m`, midX, midY - 0.1);
+
+  ctx.restore();
+}
+
+/**
+ * Draw map overlay from imported satellite/map image
+ */
+function drawMapOverlay(ctx, mapImage, metersPerPixel, canvas, scale, offsetX, offsetY) {
+  ctx.save();
+
+  // Calculate how to scale and position the map image
+  const pixelsPerMeter = 1 / metersPerPixel;
+  const mapWidthMeters = mapImage.width * metersPerPixel;
+  const mapHeightMeters = mapImage.height * metersPerPixel;
+
+  // Center map at world origin
+  ctx.globalAlpha = 0.6;
+  ctx.drawImage(
+    mapImage,
+    -mapWidthMeters / 2,
+    -mapHeightMeters / 2,
+    mapWidthMeters,
+    mapHeightMeters
+  );
+
+  ctx.restore();
+}
+
+/**
+ * Convert screen coordinates to world coordinates
+ */
+export function screenToWorld(screenX, screenY, offsetX, offsetY, scale) {
+  return {
+    x: (screenX - offsetX) / scale,
+    y: (screenY - offsetY) / scale,
+  };
+}
+
+/**
+ * Convert world coordinates to screen coordinates
+ */
+export function worldToScreen(worldX, worldY, offsetX, offsetY, scale) {
+  return {
+    x: worldX * scale + offsetX,
+    y: worldY * scale + offsetY,
+  };
+}
+
+/**
+ * Check if a point is inside an object (for hit detection)
+ */
+export function isPointInObject(point, obj) {
+  if (obj.type === "polygon" && obj.points) {
+    // Ray casting algorithm for point in polygon
+    let inside = false;
+    for (let i = 0, j = obj.points.length - 1; i < obj.points.length; j = i++) {
+      const xi = obj.points[i].x, yi = obj.points[i].y;
+      const xj = obj.points[j].x, yj = obj.points[j].y;
+
+      const intersect = ((yi > point.y) !== (yj > point.y))
+        && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // Default rectangle check
+  return (
+    point.x >= obj.x &&
+    point.x <= obj.x + obj.w &&
+    point.y >= obj.y &&
+    point.y <= obj.y + obj.h
+  );
+}
+
+/**
+ * Find object at screen coordinates
+ */
+export function getObjectAtScreenPoint(screenX, screenY, objects, offsetX, offsetY, scale) {
+  const worldPoint = screenToWorld(screenX, screenY, offsetX, offsetY, scale);
+
+  // Check objects in reverse z-order (top to bottom)
+  const sorted = [...objects].sort((a, b) => (b.h_z || 0) - (a.h_z || 0));
+
+  for (const obj of sorted) {
+    if (isPointInObject(worldPoint, obj)) {
+      return obj;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Calculate orthogonal wire path (L-shaped routing)
+ */
+export function calculateOrthogonalPath(from, to) {
+  const midX = (from.x + to.x) / 2;
+  return [{ x: midX, y: from.y }, { x: midX, y: to.y }];
+}
+
+/**
+ * Draw in-progress drawing (rectangle, polygon, or freehand)
+ */
+function drawInProgressDrawing(ctx, mode, points, preview) {
+  ctx.save();
+
+  if (mode === "rectangle" && points.length >= 2) {
+    const start = points[0];
+    const end = points[points.length - 1];
+    const minX = Math.min(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const width = Math.abs(end.x - start.x);
+    const height = Math.abs(end.y - start.y);
+
+    // Draw semi-transparent rectangle
+    ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+    ctx.fillRect(minX, minY, width, height);
+
+    // Draw outline
+    ctx.strokeStyle = "rgba(59, 130, 246, 0.8)";
+    ctx.lineWidth = 0.05;
+    ctx.strokeRect(minX, minY, width, height);
+
+    // Draw dimensions
+    ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
+    ctx.font = "bold 0.3px Arial";
+    ctx.fillText(`${width.toFixed(1)}m x ${height.toFixed(1)}m`, minX + 0.2, minY - 0.1);
+  } else if (mode === "polygon" || mode === "freehand") {
+    // Draw path points
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+
+      // Draw point
+      ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw line to next point
+      if (i < points.length - 1) {
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.6)";
+        ctx.lineWidth = 0.05;
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
+        ctx.lineTo(points[i + 1].x, points[i + 1].y);
+        ctx.stroke();
+      }
+
+      // Draw point number
+      if (mode === "polygon") {
+        ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
+        ctx.font = "bold 0.2px Arial";
+        ctx.fillText(String(i + 1), point.x + 0.2, point.y + 0.2);
+      }
+    }
+
+    // For preview, draw line to current cursor position if provided
+    if (preview && points.length > 0) {
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.3)";
+      ctx.lineWidth = 0.05;
+      ctx.setLineDash([0.1, 0.1]);
+      ctx.beginPath();
+      ctx.moveTo(points[points.length - 1].x, points[points.length - 1].y);
+      ctx.lineTo(preview.x, preview.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw preview point
+      ctx.fillStyle = "rgba(59, 130, 246, 0.5)";
+      ctx.beginPath();
+      ctx.arc(preview.x, preview.y, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // For polygon, optionally close the shape to show what it will look like
+    if (mode === "polygon" && points.length > 2 && !preview) {
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.3)";
+      ctx.lineWidth = 0.05;
+      ctx.setLineDash([0.1, 0.1]);
+      ctx.beginPath();
+      ctx.moveTo(points[points.length - 1].x, points[points.length - 1].y);
+      ctx.lineTo(points[0].x, points[0].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Draw rulers on the top and left edges of the canvas
+ * Shows meter scale for measurements
+ */
+function drawRulers(canvas, ctx, scale, offsetX, offsetY) {
+  ctx.save();
+
+  // Ruler styling - matching solar-board.html
+  ctx.fillStyle = "#374151"; // Dark gray background for rulers
+  ctx.fillRect(0, 0, canvas.width, 20); // Top ruler
+  ctx.fillRect(0, 0, 20, canvas.height); // Left ruler
+
+  ctx.strokeStyle = "#6b7280"; // Grid lines
+  ctx.fillStyle = "#9ca3af"; // Text color
+  ctx.font = "10px monospace";
+  ctx.textAlign = "center";
+
+  // Draw top ruler ticks and labels
+  const startX = Math.floor(-offsetX / scale);
+  const endX = Math.ceil((canvas.width - offsetX) / scale);
+
+  ctx.beginPath();
+  for (let i = startX; i <= endX; i++) {
+    const x = i * scale + offsetX;
+    if (i % 5 === 0) {
+      // Major tick (every 5 meters)
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 15);
+      ctx.fillText(i.toString(), x, 12);
+    } else {
+      // Minor tick (every meter)
+      ctx.moveTo(x, 15);
+      ctx.lineTo(x, 20);
+    }
+  }
+  ctx.stroke();
+
+  // Draw left ruler ticks and labels
+  const startY = Math.floor(-offsetY / scale);
+  const endY = Math.ceil((canvas.height - offsetY) / scale);
+
+  ctx.beginPath();
+  ctx.textAlign = "left";
+  for (let i = startY; i <= endY; i++) {
+    const y = i * scale + offsetY;
+    if (i % 5 === 0) {
+      // Major tick (every 5 meters)
+      ctx.moveTo(0, y);
+      ctx.lineTo(15, y);
+      ctx.save();
+      ctx.translate(2, y - 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(i.toString(), 0, 10);
+      ctx.restore();
+    } else {
+      // Minor tick (every meter)
+      ctx.moveTo(15, y);
+      ctx.lineTo(20, y);
+    }
+  }
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/**
+ * Helper to darken/lighten color
+ */
+function adjustColor(color, amount) {
+  return color; // Simplified for now, can implement proper color manipulation later
+}
+
+/**
+ * Draw sun direction indicator on the grid
+ * Draws a line from the center of the viewport towards the sun
+ */
+function drawSunDirection(ctx, shadowVector, canvas, scale, offsetX, offsetY) {
+  ctx.save();
+
+  // Calculate center of the viewport in world coordinates
+  const centerX = -offsetX / scale + (canvas.width / 2) / scale;
+  const centerY = -offsetY / scale + (canvas.height / 2) / scale;
+
+  // Shadow vector points AWAY from sun. Sun direction is opposite.
+  // Normalize shadow vector to get direction
+  const len = Math.sqrt(shadowVector.x * shadowVector.x + shadowVector.y * shadowVector.y);
+  if (len < 0.001) {
+    ctx.restore();
+    return;
+  }
+
+  const sunDirX = -shadowVector.x / len;
+  const sunDirY = -shadowVector.y / len;
+
+  // Draw a line pointing to the sun
+  const lineLength = 10; // 10 meters long line
+
+  ctx.strokeStyle = "rgba(251, 191, 36, 0.6)"; // Yellow
+  ctx.lineWidth = 0.1;
+  ctx.setLineDash([0.5, 0.2]);
+
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(centerX + sunDirX * lineLength, centerY + sunDirY * lineLength);
+  ctx.stroke();
+
+  // Draw sun icon at the end
+  const sunX = centerX + sunDirX * lineLength;
+  const sunY = centerY + sunDirY * lineLength;
+
+  ctx.fillStyle = "#fbbf24";
+  ctx.shadowColor = "rgba(251, 191, 36, 0.8)";
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/**
+ * Get resize handle at a given world point
+ * Returns handle type ('nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w') or null
+ */
+export function getResizeHandleAtPoint(worldX, worldY, obj) {
+  if (!obj || !obj.w || !obj.h) return null;
+
+  const handleSize = 0.3;
+  const threshold = handleSize / 2;
+  const x = obj.x;
+  const y = obj.y;
+  const w = obj.w;
+  const h = obj.h;
+
+  // Define handle positions (same as in drawResizeHandles)
+  const handles = [
+    { x: x, y: y, type: 'nw' },
+    { x: x + w / 2, y: y, type: 'n' },
+    { x: x + w, y: y, type: 'ne' },
+    { x: x + w, y: y + h / 2, type: 'e' },
+    { x: x + w, y: y + h, type: 'se' },
+    { x: x + w / 2, y: y + h, type: 's' },
+    { x: x, y: y + h, type: 'sw' },
+    { x: x, y: y + h / 2, type: 'w' },
+  ];
+
+  // Check each handle
+  for (const handle of handles) {
+    const dx = Math.abs(worldX - handle.x);
+    const dy = Math.abs(worldY - handle.y);
+    if (dx <= threshold && dy <= threshold) {
+      return handle.type;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Draw selection box
+ */
+function drawSelectionBox(ctx, box) {
+  const { x, y, w, h } = box;
+  ctx.save();
+  ctx.strokeStyle = "rgba(59, 130, 246, 0.8)";
+  ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+  ctx.lineWidth = 0.05;
+
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeRect(x, y, w, h);
+  ctx.restore();
+}
