@@ -1,4 +1,5 @@
 import { useSolarStore } from "../stores/solarStore";
+import { supabase } from "../lib/supabase";
 import { screenToWorld, getObjectAtScreenPoint, calculateOrthogonalPath, getResizeHandleAtPoint } from "./canvas";
 import { createRectangle, createPolygon, closePath, simplifyPath, createPanelArray } from "./drawingTools";
 
@@ -28,6 +29,28 @@ export const handleCanvasEvents = {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const worldPos = screenToWorld(screenX, screenY, store.offsetX, store.offsetY, store.scale);
+
+    // Check AI Import Mode
+    if (store.aiImportMode && store.mapSettings?.mapImage && store.mapSettings.mapOverlayActive) {
+      const zoom = store.mapSettings.zoom || 20;
+      const lat = store.latitude;
+      const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+
+      const mapWidthMeters = 800 * metersPerPixel;
+      const mapHeightMeters = 800 * metersPerPixel;
+
+      // Check if click is within map bounds
+      if (worldPos.x >= -mapWidthMeters / 2 && worldPos.x <= mapWidthMeters / 2 &&
+        worldPos.y >= -mapHeightMeters / 2 && worldPos.y <= mapHeightMeters / 2) {
+
+        // Convert to pixel coordinates (0-800)
+        const pixelX = (worldPos.x + mapWidthMeters / 2) / metersPerPixel;
+        const pixelY = (worldPos.y + mapHeightMeters / 2) / metersPerPixel;
+
+        handleAiImport(pixelX, pixelY, store);
+        return;
+      }
+    }
 
     // Check drawing modes FIRST (highest priority)
     if (store.drawingMode === "rectangle") {
@@ -742,10 +765,18 @@ export const handleCanvasEvents = {
   _updateCursor(canvas, screenX, screenY) {
     const store = useSolarStore.getState();
 
+    if (store.aiImportMode) {
+      canvas.style.cursor = "crosshair";
+      return;
+    }
+
     switch (store.mode) {
+      // ... existing cases ...
       case "pan":
         canvas.style.cursor = this._isDragging ? "grabbing" : "grab";
         break;
+      // ... (rest of _updateCursor)
+
 
       case "select": {
         // Check if hovering over a resize handle first
@@ -914,3 +945,123 @@ function calculateAlignment(x, y, w, h, objects, excludeId) {
 
   return { x: newX, y: newY, guides };
 }
+
+/**
+ * Handle AI Import Click
+ */
+export async function handleAiImport(points, store) {
+  const pointsArray = Array.isArray(points) ? points : [points];
+  console.log("Starting AI Import for", pointsArray.length, "points");
+
+  let successCount = 0;
+
+  // Process each point sequentially (or parallel if we want speed, but sequential is safer for rate limits)
+  // Parallel is better for UX.
+  const promises = pointsArray.map(async (point) => {
+    try {
+      const { lat, lng } = point;
+      // Use the clicked location as the center for the static map
+      const { data, error } = await supabase.functions.invoke('extract-map-feature', {
+        body: {
+          center: `${lat},${lng}`,
+          zoom: 20, // High zoom for building detail
+          size: '800x800',
+          point: { x: 400, y: 400 }, // Center of the image
+          maptype: 'satellite'
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.feature && data.feature.vertices) {
+        const zoom = 20;
+        const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+
+        const vertices = data.feature.vertices.map(v => ({
+          x: (v.x - 400) * metersPerPixel,
+          y: (v.y - 400) * metersPerPixel
+        }));
+
+        // Use estimated height if available, default to 3.0
+        const height = data.feature.height || 3.0;
+
+        const polygon = createPolygon(vertices, "structure", height);
+        if (polygon) {
+          // Adjust polygon position relative to the first point?
+          // No, each polygon is created relative to its own center (lat,lng).
+          // But we need to place them on the canvas relative to the canvas origin.
+          // The canvas origin (0,0) corresponds to `store.latitude, store.longitude`?
+          // Wait, `Canvas.jsx` renders map centered at `latitude, longitude`.
+          // If the user panned the map, `latitude` and `longitude` in store might be different from the import points.
+          // Actually, `MapOverlay` uses `latitude` and `longitude` from store as center.
+          // When user clicks, `lat, lng` are absolute.
+          // We need to convert absolute `lat, lng` to canvas coordinates relative to `store.latitude, store.longitude`.
+
+          // Canvas (0,0) is at `store.latitude, store.longitude`.
+          // Offset of point:
+          // dx = (point.lng - store.longitude) * metersPerDegreeLng
+          // dy = (store.latitude - point.lat) * metersPerDegreeLat (y is down)
+
+          // Wait, `metersPerPixel` calculation above is for the *static map image* fetched for that specific point.
+          // The vertices returned are relative to that point.
+          // So `polygon` vertices are relative to `point`.
+          // We need to add `point`'s offset from canvas origin.
+
+          const originLat = store.latitude;
+          const originLng = store.longitude;
+
+          const metersPerLat = 111320; // Approx
+          const metersPerLng = 111320 * Math.cos(originLat * Math.PI / 180);
+
+          const latDiff = lat - originLat;
+          const lngDiff = lng - originLng;
+
+          const offsetX = lngDiff * metersPerLng;
+          const offsetY = -latDiff * metersPerLat; // Y is down, Lat increases up
+
+          // Shift polygon vertices
+          polygon.x += offsetX;
+          polygon.y += offsetY;
+          polygon.vertices = polygon.vertices.map(v => ({
+            x: v.x + offsetX,
+            y: v.y + offsetY
+          }));
+
+          // Re-calculate bbox? createPolygon already did it.
+          // But we shifted x/y.
+          // createPolygon returns x,y as minX, minY.
+          // So just shifting x,y and vertices is enough.
+
+          store.addObject(polygon);
+          successCount++;
+
+          // Center view on the imported polygon (using the last one if multiple)
+          if (store.canvas) {
+            const canvas = store.canvas;
+            const scale = store.scale;
+            const centerX = polygon.x + polygon.w / 2;
+            const centerY = polygon.y + polygon.h / 2;
+
+            const newOffsetX = (canvas.width / 2) - (centerX * scale);
+            const newOffsetY = (canvas.height / 2) - (centerY * scale);
+
+            store.setOffset(newOffsetX, newOffsetY);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("AI Import failed for point:", point, err);
+    }
+  });
+
+  await Promise.all(promises);
+
+  if (successCount > 0) {
+    store.saveState();
+    console.log("AI Import successful for", successCount, "buildings");
+    store.setAiImportMode(false);
+  } else {
+    alert("No buildings detected.");
+  }
+}
+

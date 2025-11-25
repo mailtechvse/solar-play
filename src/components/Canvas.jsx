@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { renderCanvas, setColorTheme } from "../utils/canvas";
-import { handleCanvasEvents } from "../utils/canvasEvents";
+import { handleCanvasEvents, handleAiImport } from "../utils/canvasEvents";
 import SimulationControls from "./SimulationControls";
+import MapOverlay from './MapOverlay';
 
 export default function Canvas() {
   const canvasRef = useRef(null);
@@ -26,6 +27,8 @@ export default function Canvas() {
   const drawingPreview = useSolarStore((state) => state.drawingPreview);
   const mapSettings = useSolarStore((state) => state.mapSettings);
   const selectionBox = useSolarStore((state) => state.selectionBox);
+  const aiImportMode = useSolarStore((state) => state.aiImportMode);
+  const store = useSolarStore();
 
   const [loadedMapImage, setLoadedMapImage] = React.useState(null);
 
@@ -35,6 +38,10 @@ export default function Canvas() {
       const img = new Image();
       img.src = mapSettings.mapImage;
       img.onload = () => setLoadedMapImage(img);
+      img.onerror = (e) => {
+        console.error("Failed to load map image:", mapSettings.mapImage, e);
+        setLoadedMapImage(null);
+      };
     } else {
       setLoadedMapImage(null);
     }
@@ -172,6 +179,10 @@ export default function Canvas() {
         className="w-full h-full"
         style={{ imageRendering: "pixelated" }}
       />
+
+      {aiImportMode && (
+        <MapOverlay onMapClick={(points) => handleAiImport(points, store)} />
+      )}
 
       <SimulationControls />
       {/* Bottom Right Overlay (Compass & Legend) */}

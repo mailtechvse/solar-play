@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 import ProjectsModal from "./ProjectsModal";
 
 export default function TopBar() {
@@ -11,6 +12,7 @@ export default function TopBar() {
     estimatedCost: 0,
   });
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -27,6 +29,10 @@ export default function TopBar() {
   const runEvaluation = useSolarStore((state) => state.runEvaluation);
   const loadProject = useSolarStore((state) => state.loadProject);
   const setTheme = useSolarStore((state) => state.setTheme);
+  const mapSettings = useSolarStore((state) => state.mapSettings);
+  const setMapSettings = useSolarStore((state) => state.setMapSettings);
+  const aiImportMode = useSolarStore((state) => state.aiImportMode);
+  const setAiImportMode = useSolarStore((state) => state.setAiImportMode);
 
   // Location State
   const latitude = useSolarStore((state) => state.latitude);
@@ -78,26 +84,27 @@ export default function TopBar() {
     }
   };
 
-  const searchPlace = async (query) => {
-    if (!query || query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm.length >= 3) {
+        performSearch(searchTerm);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
+  const performSearch = async (query) => {
     setIsSearching(true);
     try {
-      // Using Open Street Map Nominatim API (free, no API key required)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
-      );
-      const results = await response.json();
+      const { data, error } = await supabase.functions.invoke('search-places', {
+        body: { query }
+      });
 
-      if (results && results.length > 0) {
-        setSearchResults(results.map(r => ({
-          name: r.display_name,
-          lat: parseFloat(r.lat),
-          lon: parseFloat(r.lon),
-        })));
+      if (error) throw error;
+
+      if (data.results) {
+        setSearchResults(data.results);
         setShowSearchResults(true);
       } else {
         setSearchResults([]);
@@ -110,12 +117,82 @@ export default function TopBar() {
     }
   };
 
-  const handleSelectLocation = (result) => {
-    setLatitude(parseFloat(result.lat.toFixed(4)));
-    setLongitude(parseFloat(result.lon.toFixed(4)));
-    setSearchQuery("");
+  const handleSelectLocation = async (result) => {
+    setSearchQuery(result.formatted_address || result.name);
+    setSearchTerm("");
     setSearchResults([]);
     setShowSearchResults(false);
+
+    let lat, lng;
+
+    // Check if location is already present (from Text Search)
+    if (result.location) {
+      lat = result.location.lat;
+      lng = result.location.lng;
+    } else if (result.place_id) {
+      // Fallback to details fetch if needed
+      try {
+        const { data, error } = await supabase.functions.invoke('get-place-details', {
+          body: { place_id: result.place_id }
+        });
+        if (error) throw error;
+        if (data.location) {
+          lat = data.location.lat;
+          lng = data.location.lng;
+        }
+      } catch (err) {
+        console.error("Details error:", err);
+      }
+    }
+
+    if (lat && lng) {
+      setLatitude(lat);
+      setLongitude(lng);
+
+      // Center view
+      const canvas = useSolarStore.getState().canvas;
+      if (canvas) {
+        useSolarStore.getState().setOffset(canvas.width / 2, canvas.height / 2);
+      }
+
+      // Fetch map via Edge Function
+      try {
+        const { data, error } = await supabase.functions.invoke('get-static-map', {
+          body: {
+            center: `${lat},${lng}`,
+            zoom: mapSettings?.zoom || 20
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.image) {
+          setMapSettings({
+            ...mapSettings,
+            mapImage: data.image,
+            mapOverlayActive: true
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch map:", err);
+
+        // Fallback to client-side if env key exists
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+        if (apiKey) {
+          const zoom = mapSettings?.zoom || 20;
+          const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=800x800&maptype=satellite&key=${apiKey}`;
+          setMapSettings({
+            ...mapSettings,
+            googleApiKey: apiKey,
+            mapImage: mapUrl,
+            mapOverlayActive: true
+          });
+        } else {
+          // No fallback available, show error
+          alert(`Failed to load map. Please ensure GOOGLE_MAPS_API_KEY is set in Supabase secrets. Error: ${err.message}`);
+        }
+      }
+    }
   };
 
   const handleSaveLocal = () => {
@@ -182,7 +259,7 @@ export default function TopBar() {
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
-                    searchPlace(e.target.value);
+                    setSearchTerm(e.target.value);
                   }}
                   onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
                   placeholder="Search place..."
@@ -200,10 +277,10 @@ export default function TopBar() {
                         key={idx}
                         onClick={() => handleSelectLocation(result)}
                         className="w-full text-left px-2 py-1 text-xs text-gray-300 hover:bg-blue-600 hover:text-white border-b border-gray-700 last:border-b-0 transition"
-                        title={result.name}
+                        title={result.formatted_address || result.name}
                       >
-                        <div className="truncate">{result.name.split(',')[0]}</div>
-                        <div className="text-[10px] text-gray-500 truncate">{result.lat.toFixed(4)}, {result.lon.toFixed(4)}</div>
+                        <div className="truncate">{result.name}</div>
+                        <div className="text-[10px] text-gray-500 truncate">{result.formatted_address}</div>
                       </button>
                     ))}
                   </div>
@@ -271,6 +348,13 @@ export default function TopBar() {
 
           {/* Grid & Cable */}
           <div className="flex items-center gap-2 mr-2">
+            <button
+              onClick={() => setAiImportMode(!aiImportMode)}
+              className={`text-xs px-2 py-1 rounded text-white border border-gray-600 flex items-center gap-2 ${aiImportMode ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-700 hover:bg-gray-600'}`}
+              title="Click on a building on the map to import it"
+            >
+              <i className="fas fa-magic"></i> AI Import
+            </button>
             <button
               onClick={() => setShowGrid(!showGrid)}
               className={`text-xs px-2 py-1 rounded text-white border border-gray-600 flex items-center gap-2 ${showGrid ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'}`}

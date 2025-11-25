@@ -18,8 +18,16 @@ export function AuthProvider({ children }) {
         setUser(currentUser);
 
         if (currentUser) {
-          const userProfile = await authService.getUserProfile();
-          setProfile(userProfile);
+          const isAuthorized = await authService.isEmailAuthorized(currentUser.email);
+          if (!isAuthorized) {
+            await authService.signOut();
+            setUser(null);
+            setProfile(null);
+            setError("Access Denied: Your email is not authorized to access this system.");
+          } else {
+            const userProfile = await authService.getUserProfile();
+            setProfile(userProfile);
+          }
         }
       } catch (err) {
         console.error("Auth check failed:", err);
@@ -37,10 +45,16 @@ export function AuthProvider({ children }) {
     const subscription = authService.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_IN" && session?.user) {
-          setUser(session.user);
-          const userProfile = await authService.getUserProfile();
-          setProfile(userProfile);
-          setError(null);
+          const isAuthorized = await authService.isEmailAuthorized(session.user.email);
+          if (!isAuthorized) {
+            await authService.signOut();
+            setError("Access Denied: Your email is not authorized to access this system.");
+          } else {
+            setUser(session.user);
+            const userProfile = await authService.getUserProfile();
+            setProfile(userProfile);
+            setError(null);
+          }
         } else if (event === "SIGNED_OUT") {
           setUser(null);
           setProfile(null);
@@ -52,6 +66,28 @@ export function AuthProvider({ children }) {
       subscription?.unsubscribe();
     };
   }, []);
+
+  // Periodic authorization check (every 5 minutes)
+  useEffect(() => {
+    if (!user) return;
+
+    const checkInterval = setInterval(async () => {
+      try {
+        const isAuthorized = await authService.isEmailAuthorized(user.email);
+        if (!isAuthorized) {
+          console.warn("Periodic auth check failed. Signing out.");
+          await authService.signOut();
+          setUser(null);
+          setProfile(null);
+          setError("Access Denied: Authorization revoked.");
+        }
+      } catch (err) {
+        console.error("Periodic auth check error:", err);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(checkInterval);
+  }, [user]);
 
   const signInWithGoogle = async () => {
     try {

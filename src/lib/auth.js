@@ -106,4 +106,21 @@ export const authService = {
     const user = await this.getCurrentUser();
     return !!user;
   },
+
+  // Check if email is authorized
+  async isEmailAuthorized(email) {
+    try {
+      const { data, error } = await supabase.functions.invoke('check-auth');
+
+      if (error) {
+        console.error("Error checking authorization:", error);
+        return false;
+      }
+
+      return data?.authorized || false;
+    } catch (err) {
+      console.error("Authorization check failed:", err);
+      return false;
+    }
+  },
 };

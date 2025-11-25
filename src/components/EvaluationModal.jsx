@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef } from "react";
+import React, { useMemo, useEffect, useRef, useState } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { formatCurrency, formatEnergy } from "../utils/simulation";
 import Chart from "chart.js/auto";
@@ -10,6 +10,15 @@ export default function EvaluationModal() {
   const objects = useSolarStore((state) => state.objects);
   const wires = useSolarStore((state) => state.wires);
 
+  const setBoqOverride = useSolarStore((state) => state.setBoqOverride);
+  const removeBoqOverride = useSolarStore((state) => state.removeBoqOverride);
+  const runEvaluation = useSolarStore((state) => state.runEvaluation);
+
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemQty, setNewItemQty] = useState(1);
+  const [newItemCost, setNewItemCost] = useState(0);
+
   const chartRefs = {
     generation: useRef(null),
     roi: useRef(null),
@@ -19,6 +28,35 @@ export default function EvaluationModal() {
     generation: null,
     roi: null,
   });
+
+  const handleUpdateItem = (key, field, value) => {
+    if (!evaluationData?.boq) return;
+    const currentItem = evaluationData.boq[key];
+    const newItem = { ...currentItem, [field]: parseFloat(value) || 0 };
+    setBoqOverride(key, newItem);
+    setTimeout(() => runEvaluation(), 0);
+  };
+
+  const handleAddItem = () => {
+    if (!newItemName) return;
+    setBoqOverride(newItemName, { count: parseFloat(newItemQty), cost: parseFloat(newItemCost), type: 'custom' });
+    setNewItemName("");
+    setNewItemQty(1);
+    setNewItemCost(0);
+    setShowAddItem(false);
+    setTimeout(() => runEvaluation(), 0);
+  };
+
+  const handleDeleteItem = (key) => {
+    const item = evaluationData.boq[key];
+    if (item.type === 'custom' || item.type === 'extra') {
+      removeBoqOverride(key);
+    } else {
+      // For generated items, set to 0 to "delete" them from calculation
+      setBoqOverride(key, { count: 0, cost: 0, type: item.type });
+    }
+    setTimeout(() => runEvaluation(), 0);
+  };
 
   // Initialize charts when data changes
   useEffect(() => {
@@ -261,10 +299,10 @@ export default function EvaluationModal() {
                     <div className="w-full bg-gray-600 rounded-full h-8 overflow-hidden">
                       <div
                         className={`h-full transition-all ${evaluationData.score > 80
-                            ? "bg-green-500"
-                            : evaluationData.score > 50
-                              ? "bg-yellow-500"
-                              : "bg-red-500"
+                          ? "bg-green-500"
+                          : evaluationData.score > 50
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
                           }`}
                         style={{ width: `${evaluationData.score}%` }}
                       ></div>
@@ -352,7 +390,35 @@ export default function EvaluationModal() {
           {/* Bill of Quantities (BOQ) */}
           {evaluationData.boq && (
             <div className="bg-gray-700 p-4 rounded">
-              <h3 className="text-white font-bold mb-3">Bill of Quantities (BOQ)</h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-white font-bold">Bill of Quantities (BOQ)</h3>
+                <button
+                  onClick={() => setShowAddItem(!showAddItem)}
+                  className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded transition"
+                >
+                  <i className="fas fa-plus mr-1"></i> Add Item
+                </button>
+              </div>
+
+              {/* Add Item Form */}
+              {showAddItem && (
+                <div className="bg-gray-800 p-3 rounded mb-3 flex gap-2 items-end animate-fade-in border border-gray-600">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-400 block mb-1">Item Name</label>
+                    <input type="text" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="e.g. Installation" />
+                  </div>
+                  <div className="w-20">
+                    <label className="text-xs text-gray-400 block mb-1">Qty</label>
+                    <input type="number" value={newItemQty} onChange={e => setNewItemQty(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                  </div>
+                  <div className="w-24">
+                    <label className="text-xs text-gray-400 block mb-1">Cost (₹)</label>
+                    <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                  </div>
+                  <button onClick={handleAddItem} className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded h-8 transition">Add</button>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -360,20 +426,45 @@ export default function EvaluationModal() {
                       <th className="text-left py-2 px-2 text-gray-300">Item</th>
                       <th className="text-right py-2 px-2 text-gray-300">Quantity</th>
                       <th className="text-right py-2 px-2 text-gray-300">Est. Cost</th>
+                      <th className="w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(evaluationData.boq).map(([key, val]) => (
-                      <tr key={key} className="border-b border-gray-600 hover:bg-gray-600">
+                      <tr key={key} className="border-b border-gray-600 hover:bg-gray-600 group">
                         <td className="py-2 px-2 text-white">{key}</td>
-                        <td className="text-right py-2 px-2 text-blue-400">{val.count}</td>
-                        <td className="text-right py-2 px-2 text-green-400">{formatCurrency(val.cost)}</td>
+                        <td className="text-right py-2 px-2">
+                          <input
+                            type="number"
+                            value={val.count}
+                            onChange={(e) => handleUpdateItem(key, 'count', e.target.value)}
+                            className="w-16 bg-transparent text-right text-blue-400 border-b border-transparent hover:border-gray-500 focus:border-blue-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="text-right py-2 px-2">
+                          <input
+                            type="number"
+                            value={val.cost}
+                            onChange={(e) => handleUpdateItem(key, 'cost', e.target.value)}
+                            className="w-24 bg-transparent text-right text-green-400 border-b border-transparent hover:border-gray-500 focus:border-green-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="text-center">
+                          <button
+                            onClick={() => handleDeleteItem(key)}
+                            className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-300 transition"
+                            title="Remove/Reset"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     <tr className="bg-gray-600 font-bold">
                       <td className="py-2 px-2 text-white">Total</td>
                       <td className="text-right py-2 px-2"></td>
                       <td className="text-right py-2 px-2 text-green-400">{formatCurrency(evaluationData.systemCost || 0)}</td>
+                      <td></td>
                     </tr>
                   </tbody>
                 </table>
@@ -466,10 +557,10 @@ export default function EvaluationModal() {
                           <td className="py-2 px-2">
                             <span
                               className={`px-2 py-1 rounded text-xs font-bold ${year.roiStatus === "Break Even"
-                                  ? "bg-yellow-600 text-yellow-100"
-                                  : year.roiStatus === "Profitable"
-                                    ? "bg-green-600 text-green-100"
-                                    : "bg-red-600 text-red-100"
+                                ? "bg-yellow-600 text-yellow-100"
+                                : year.roiStatus === "Profitable"
+                                  ? "bg-green-600 text-green-100"
+                                  : "bg-red-600 text-red-100"
                                 }`}
                             >
                               {year.roiStatus}

@@ -18,6 +18,7 @@ export function runSimulation(objects, wires, params) {
     systemCost = 0, // ₹
     isCommercial = false,
     extraCostItems = [],
+    boqOverrides = {},
   } = params;
 
   // Extract equipment from objects
@@ -30,6 +31,23 @@ export function runSimulation(objects, wires, params) {
   const dcCapacityKwp = panels.reduce((sum, p) => sum + (p.watts || 0), 0) / 1000;
   const acCapacityKw = inverters.reduce((sum, i) => sum + (i.capKw || 0), 0);
   const batteryCapacityKwh = batteries.reduce((sum, b) => sum + (b.capKwh || 0), 0);
+
+  // Calculate weighted average inverter efficiency
+  let inverterEfficiency = 0.975; // Default 97.5%
+  if (inverters.length > 0) {
+    let totalInvCapacity = 0;
+    let weightedEff = 0;
+    inverters.forEach(inv => {
+      const specs = typeof inv.specifications === 'string' ? JSON.parse(inv.specifications) : (inv.specifications || {});
+      const eff = specs.efficiency !== undefined ? specs.efficiency : 97.5;
+      const cap = inv.capKw || 0;
+      weightedEff += eff * cap;
+      totalInvCapacity += cap;
+    });
+    if (totalInvCapacity > 0) {
+      inverterEfficiency = (weightedEff / totalInvCapacity) / 100;
+    }
+  }
 
   // Check if system exists
   if (dcCapacityKwp === 0) {
@@ -72,8 +90,9 @@ export function runSimulation(objects, wires, params) {
   months.forEach((month, i) => {
     // Potential generation based on capacity, seasonality, and 4.5 peak sun hours average
     const potentialGen = dcCapacityKwp * 4.5 * 30 * seasonality[i];
-    const actualGen = potentialGen * shadowLossFactor;
-    const shadowLoss = potentialGen - actualGen;
+    // Apply shadow loss and inverter efficiency
+    const actualGen = potentialGen * shadowLossFactor * inverterEfficiency;
+    const shadowLoss = potentialGen - (potentialGen * shadowLossFactor); // Loss due to shadow only
 
     monthlyGenData.push(actualGen);
     monthlyLossData.push(shadowLoss);
@@ -119,32 +138,6 @@ export function runSimulation(objects, wires, params) {
   if (efficiencyScore < 50) suggestions.push("System efficiency is low. Check connections and potential shading issues.");
   if (dcCapacityKwp > 0 && acCapacityKw === 0) suggestions.push("No Inverter detected. System will not function.");
 
-  // Auto-calculate system cost if not provided
-  if (!systemCost || systemCost === 0) {
-    // Calculate structure cost based on mounting type
-    const structureCost = panels.reduce((sum, p) => {
-      const type = p.mountingType || 'ground';
-      const costPerPanel = type === 'rcc' ? 1000 : type === 'tinshed' ? 1500 : 2000;
-      return sum + costPerPanel;
-    }, 0);
-
-    const extraCost = extraCostItems.reduce((s, i) => s + (i.cost || 0), 0);
-
-    const componentCost = panels.reduce((s, p) => s + (p.cost || 0), 0) +
-      inverters.reduce((s, i) => s + (i.cost || 0), 0) +
-      batteries.reduce((s, b) => s + (b.cost || 0), 0) +
-      wires.length * 500 + // Estimate wire cost
-      structureCost +
-      extraCost;
-
-    // If component cost is low (e.g. no costs assigned), use benchmark
-    if (componentCost < 1000 && dcCapacityKwp > 0) {
-      systemCost = dcCapacityKwp * 45000; // Fallback ₹45k/kWp
-    } else {
-      systemCost = componentCost;
-    }
-  }
-
   // Generate BOQ
   const boq = {};
   objects.forEach(o => {
@@ -176,6 +169,28 @@ export function runSimulation(objects, wires, params) {
     boq['DC/AC Wires'] = { count: wires.length, cost: wires.length * 500, type: 'wire' };
   }
 
+  // Apply BOQ Overrides
+  if (boqOverrides) {
+    Object.entries(boqOverrides).forEach(([key, val]) => {
+      boq[key] = { ...(boq[key] || { type: 'custom' }), ...val };
+    });
+  }
+
+  // Calculate system cost from BOQ
+  if (!systemCost || systemCost === 0) {
+    let calculatedCost = 0;
+    Object.values(boq).forEach(item => {
+      calculatedCost += (item.cost || 0);
+    });
+
+    // If component cost is low (e.g. no costs assigned), use benchmark
+    if (calculatedCost < 1000 && dcCapacityKwp > 0) {
+      systemCost = dcCapacityKwp * 45000; // Fallback ₹45k/kWp
+    } else {
+      systemCost = calculatedCost;
+    }
+  }
+
   // Battery Backup Estimation (assuming 50% depth of discharge for lead-acid or 80% for Li-ion, using 80% generic)
   // Load is monthly. Avg hourly load = (TotalMonthlyLoad / 30 / 24) kW.
   // Backup Hours = (Battery kWh * 0.8) / Avg Load kW
@@ -184,9 +199,26 @@ export function runSimulation(objects, wires, params) {
 
   let bookValue = systemCost;
 
+  // Get panel degradation specs (use first panel or average)
+  const firstPanel = panels[0] || {};
+  const panelSpecs = typeof firstPanel.specifications === 'string' ? JSON.parse(firstPanel.specifications) : (firstPanel.specifications || {});
+  const degYear1 = (panelSpecs.degradation_year1 !== undefined ? panelSpecs.degradation_year1 : 2.0) / 100;
+  const degAnnual = (panelSpecs.degradation_annual !== undefined ? panelSpecs.degradation_annual : 0.4) / 100;
+  // const warrantyYears = panelSpecs.warranty_years || 25;
+
   for (let y = 1; y <= 25; y++) {
-    const degradation = Math.pow(0.995, y - 1); // 0.5% annual degradation
-    const yearlyGen = totalAnnualGen * degradation;
+    // Calculate degradation factor
+    // Year 1: (1 - degYear1)
+    // Year 2+: (1 - degYear1) - ((y-1) * degAnnual)
+    let degradationFactor;
+    if (y === 1) {
+      degradationFactor = 1 - degYear1;
+    } else {
+      degradationFactor = 1 - degYear1 - ((y - 1) * degAnnual);
+    }
+    degradationFactor = Math.max(0, degradationFactor);
+
+    const yearlyGen = totalAnnualGen * degradationFactor;
     let yearlySavings = yearlyGen * gridRate;
     let adBenefit = 0;
 
@@ -505,7 +537,8 @@ function getShadowVectorForMonth(month) {
   if (elevation < 0.1) return null;
 
   // Shadow direction (opposite of sun)
-  const len = Math.min(3.0, (1 / Math.max(0.15, elevation)) * 0.7);
+  // Removed arbitrary cap of 3.0 on shadow length
+  const len = (1 / Math.max(0.15, elevation)) * 0.7;
   return {
     x: -Math.cos(angle) * len,
     y: -Math.sin(angle) * len,

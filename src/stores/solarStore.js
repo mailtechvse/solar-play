@@ -33,6 +33,7 @@ export const useSolarStore = create((set, get) => ({
   systemCost: 0,
   isCommercial: false,
   extraCostItems: [],
+  boqOverrides: {},
 
   // Location & Orientation setters
   setLatitude: (latitude) => set({ latitude }),
@@ -46,6 +47,12 @@ export const useSolarStore = create((set, get) => ({
   setIsCommercial: (isCommercial) => set({ isCommercial }),
   addExtraCostItem: (item) => set((state) => ({ extraCostItems: [...state.extraCostItems, item] })),
   removeExtraCostItem: (id) => set((state) => ({ extraCostItems: state.extraCostItems.filter(i => i.id !== id) })),
+  setBoqOverride: (key, override) => set((state) => ({ boqOverrides: { ...state.boqOverrides, [key]: override } })),
+  removeBoqOverride: (key) => set((state) => {
+    const newOverrides = { ...state.boqOverrides };
+    delete newOverrides[key];
+    return { boqOverrides: newOverrides };
+  }),
 
   // Objects and wires
   objects: [],
@@ -114,6 +121,7 @@ export const useSolarStore = create((set, get) => ({
   setCanvas: (canvas, ctx) => set({ canvas, ctx }),
   setMode: (mode) => set({ mode }),
   setCableMode: (cableMode) => set({ cableMode }),
+  setAiImportMode: (aiImportMode) => set({ aiImportMode }),
   setScale: (scale) => set({ scale }),
   setOffset: (offsetX, offsetY) => set({ offsetX, offsetY }),
   setShowGrid: (showGrid) => set({ showGrid }),
@@ -313,6 +321,7 @@ export const useSolarStore = create((set, get) => ({
       systemCost: state.systemCost,
       isCommercial: state.isCommercial,
       extraCostItems: state.extraCostItems,
+      boqOverrides: state.boqOverrides,
     });
     set({
       evaluationData: results,

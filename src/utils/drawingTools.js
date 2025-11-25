@@ -129,12 +129,6 @@ export function createPolygon(vertices, type = "structure", height = 3.0) {
 
   const props = getTypeProperties(type);
 
-  // Normalize vertices relative to bounding box
-  const normalizedVertices = vertices.map((v) => ({
-    x: v.x - bbox.minX,
-    y: v.y - bbox.minY,
-  }));
-
   return {
     id: "poly_" + Date.now(),
     type: type,
@@ -150,7 +144,7 @@ export function createPolygon(vertices, type = "structure", height = 3.0) {
     cost: Math.round(area * 500),
     area: area,
     isPolygon: true,
-    vertices: normalizedVertices,
+    vertices: vertices, // Use absolute vertices
   };
 }
 

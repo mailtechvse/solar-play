@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSolarStore } from "../stores/solarStore";
+import { supabase } from "../lib/supabase";
 
 export default function MapSetupModal() {
     const isOpen = useSolarStore((state) => state.isMapSetupOpen);
@@ -20,85 +21,110 @@ export default function MapSetupModal() {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const searchInputRef = useRef(null);
     const suggestionsRef = useRef(null);
+    const [searchTerm, setSearchTerm] = useState("");
 
-    // Load Google Places API script
+    // Debounce search
     useEffect(() => {
-        if (!isOpen || !googleApiKey) return;
+        const timer = setTimeout(() => {
+            if (searchTerm.length >= 3) {
+                performSearch(searchTerm);
+            }
+        }, 1000);
 
-        // Check if script already loaded
-        if (window.google?.maps?.places) return;
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
-        const script = document.createElement("script");
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleApiKey}&libraries=places`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-
-        return () => {
-            // Cleanup script if needed
-        };
-    }, [isOpen, googleApiKey]);
-
-    // Handle location search
-    const handleSearchLocation = async (query) => {
-        setSearchQuery(query);
-
-        if (!query || query.length < 3 || !googleApiKey) {
-            setSuggestions([]);
-            setShowSuggestions(false);
-            return;
-        }
-
+    const performSearch = async (query) => {
         try {
-            // Use Google Places Autocomplete API
-            const response = await fetch(
-                `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${googleApiKey}`,
-                { mode: 'cors' }
-            );
+            const { data, error } = await supabase.functions.invoke('search-places', {
+                body: { query }
+            });
 
-            // Note: Direct fetch to Google Places API will fail due to CORS
-            // We'll use the Google Maps JavaScript API instead
-            if (window.google?.maps?.places) {
-                const service = new window.google.maps.places.AutocompleteService();
-                service.getPlacePredictions(
-                    { input: query },
-                    (predictions, status) => {
-                        if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-                            setSuggestions(predictions);
-                            setShowSuggestions(true);
-                        } else {
-                            setSuggestions([]);
-                            setShowSuggestions(false);
-                        }
-                    }
-                );
+            if (error) throw error;
+
+            if (data.results) {
+                setSuggestions(data.results);
+                setShowSuggestions(true);
             }
         } catch (error) {
             console.error("Location search error:", error);
         }
     };
 
+    // Load Google Places API script - REMOVED (Using Edge Function)
+    /*
+    useEffect(() => {
+        if (!isOpen || !googleApiKey) return;
+        // ...
+    }, [isOpen, googleApiKey]);
+    */
+
+    // Handle location search
+    const handleSearchLocation = (query) => {
+        setSearchQuery(query);
+        setSearchTerm(query);
+
+        if (!query || query.length < 3) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
+    };
+
     // Handle suggestion selection
-    const handleSelectSuggestion = (placeId, description) => {
-        setSearchQuery(description);
+    const handleSelectSuggestion = async (place) => {
+        setSearchQuery(place.formatted_address || place.name);
+        setSearchTerm(""); // Clear search term to cancel pending debounce
         setShowSuggestions(false);
 
-        if (window.google?.maps?.places) {
-            const service = new window.google.maps.places.PlacesService(
-                document.createElement('div')
-            );
+        let lat, lng;
 
-            service.getDetails(
-                { placeId: placeId },
-                (place, status) => {
-                    if (status === window.google.maps.places.PlacesServiceStatus.OK && place.geometry) {
-                        const lat = place.geometry.location.lat();
-                        const lng = place.geometry.location.lng();
-                        setLatitude(parseFloat(lat.toFixed(4)));
-                        setLongitude(parseFloat(lng.toFixed(4)));
-                    }
+        if (place.location) {
+            lat = parseFloat(place.location.lat);
+            lng = parseFloat(place.location.lng);
+        } else if (place.place_id) {
+            try {
+                const { data, error } = await supabase.functions.invoke('get-place-details', {
+                    body: { place_id: place.place_id }
+                });
+
+                if (error) throw error;
+
+                if (data.location) {
+                    lat = parseFloat(data.location.lat);
+                    lng = parseFloat(data.location.lng);
                 }
-            );
+            } catch (err) {
+                console.error("Error fetching place details:", err);
+                return;
+            }
+        }
+
+        if (lat && lng) {
+            setLatitude(lat);
+            setLongitude(lng);
+
+            // Auto-load map
+            if (googleApiKey) {
+                setLoading(true);
+                const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=800x800&maptype=satellite&key=${googleApiKey}`;
+
+                const img = new Image();
+                img.onload = () => {
+                    setMapSettings({
+                        googleApiKey,
+                        geminiApiKey,
+                        zoom,
+                        mapImage: mapUrl,
+                        mapOverlayActive: true
+                    });
+                    setLoading(false);
+                };
+                img.onerror = () => {
+                    setLoading(false);
+                    alert("Failed to load map image.");
+                };
+                img.src = mapUrl;
+            }
         }
     };
 
@@ -164,114 +190,21 @@ export default function MapSetupModal() {
             return;
         }
 
-        setLoading(true);
-        try {
-            // 1. Fetch the map image as base64
-            const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=${zoom}&size=800x800&maptype=satellite&key=${googleApiKey}`;
+        // Enable AI Import Mode
+        useSolarStore.getState().setAiImportMode(true);
 
-            // We need to fetch it through a proxy or allow CORS if possible, but for now we'll try fetching directly.
-            // Note: Fetching Google Maps image directly from browser might fail due to CORS.
-            // In a real app, this should be done via a backend proxy.
-            // For this demo, we'll assume the user might have a way to bypass CORS or we use a trick.
-            // Actually, we can't easily fetch the image data due to CORS on the client side.
-            // WORKAROUND: We will pass the URL to Gemini if it supports it, OR we just simulate it for now if CORS fails.
-            // Gemini 1.5 Flash supports image URLs? No, usually base64.
+        // Ensure map settings are saved
+        const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=${zoom}&size=800x800&maptype=satellite&key=${googleApiKey}`;
+        setMapSettings({
+            googleApiKey,
+            geminiApiKey,
+            zoom,
+            mapImage: mapUrl,
+            mapOverlayActive: true
+        });
 
-            // Let's try to fetch it. If it fails, we'll alert the user.
-            let base64Image;
-            try {
-                const response = await fetch(mapUrl);
-                const blob = await response.blob();
-                base64Image = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                    reader.readAsDataURL(blob);
-                });
-            } catch (e) {
-                console.warn("CORS blocked image fetch. Using placeholder logic or alerting user.");
-                // Fallback: We can't do true AI import without a backend proxy for the image.
-                // However, we can try to use the user's provided keys.
-                throw new Error("Cannot fetch map image due to browser CORS restrictions. A backend is required for this feature.");
-            }
-
-            // 2. Call Gemini API
-            const prompt = `Analyze this satellite image. Identify the roof of the main building in the center. Return a JSON object with a 'polygon' key containing an array of {x, y} coordinates for the roof corners. The coordinates should be normalized (0 to 1), where (0,0) is top-left and (1,1) is bottom-right. Only return the JSON.`;
-
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
-
-            const geminiResponse = await fetch(geminiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            { inline_data: { mime_type: "image/png", data: base64Image } }
-                        ]
-                    }]
-                })
-            });
-
-            const data = await geminiResponse.json();
-
-            if (data.error) {
-                throw new Error(data.error.message);
-            }
-
-            // 3. Parse response
-            const text = data.candidates[0].content.parts[0].text;
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) throw new Error("Invalid response from AI");
-
-            const result = JSON.parse(jsonMatch[0]);
-
-            if (result.polygon && result.polygon.length > 2) {
-                // 4. Convert to canvas coordinates
-                // Map size is 800x800 pixels
-                // Meters per pixel calculation
-                const metersPerPixel = 156543.03392 * Math.cos(latitude * Math.PI / 180) / Math.pow(2, zoom);
-                const mapWidthMeters = 800 * metersPerPixel;
-                const mapHeightMeters = 800 * metersPerPixel;
-
-                // Convert normalized (0-1) to local meters (centered at 0,0)
-                const points = result.polygon.map(p => ({
-                    x: (p.x - 0.5) * mapWidthMeters,
-                    y: (p.y - 0.5) * mapHeightMeters
-                }));
-
-                // Create polygon object
-                const newObject = {
-                    id: Math.random().toString(36).slice(2),
-                    type: "polygon",
-                    x: points[0].x, // Position is relative to the first point for polygons usually, or we use absolute points
-                    y: points[0].y,
-                    points: points, // Store relative points
-                    h_z: 3, // Default height 3m
-                    cost: 0,
-                    color: "#6b7280", // Roof color
-                    label: "AI Roof",
-                };
-
-                addObject(newObject);
-                setMapSettings({
-                    googleApiKey,
-                    geminiApiKey,
-                    zoom,
-                    mapImage: mapUrl,
-                    mapOverlayActive: true
-                });
-                setOpen(false);
-                alert("Building imported successfully!");
-            } else {
-                throw new Error("No building polygon found");
-            }
-
-        } catch (error) {
-            console.error("Import error:", error);
-            alert("Error importing building: " + error.message);
-        } finally {
-            setLoading(false);
-        }
+        setOpen(false);
+        alert("AI Import Mode Enabled. Click on any building on the map to import it as a 3D object.");
     };
 
     if (!isOpen) return null;
@@ -322,7 +255,7 @@ export default function MapSetupModal() {
                                     {suggestions.map((suggestion) => (
                                         <div
                                             key={suggestion.place_id}
-                                            onClick={() => handleSelectSuggestion(suggestion.place_id, suggestion.description)}
+                                            onClick={() => handleSelectSuggestion(suggestion)}
                                             className="p-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
                                         >
                                             <div className="flex items-start gap-2">

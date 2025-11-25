@@ -245,7 +245,16 @@ export default function CustomComponentModal() {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div className={`bg-gray-800 rounded-lg p-6 w-full mx-4 max-h-[90vh] overflow-y-auto transition-all duration-300 ${showModelSelector ? 'max-w-6xl' : 'max-w-lg'}`}>
+      <div className={`bg-gray-800 rounded-lg p-6 w-full mx-4 max-h-[90vh] overflow-y-auto transition-all duration-300 ${showModelSelector ? 'max-w-6xl' : 'max-w-lg'} relative`}>
+
+        {/* Loader Overlay */}
+        {isUploading && (
+          <div className="absolute inset-0 bg-gray-900 bg-opacity-80 flex flex-col items-center justify-center z-10 rounded-lg">
+            <i className="fas fa-circle-notch fa-spin text-4xl text-blue-500 mb-3"></i>
+            <p className="text-white font-medium">Analyzing Datasheet...</p>
+            <p className="text-gray-400 text-xs mt-1">Extracting specifications with Gemini AI</p>
+          </div>
+        )}
 
         {showModelSelector ? (
           // TABLE VIEW FOR BULK IMPORT
@@ -390,7 +399,7 @@ export default function CustomComponentModal() {
                           hover:file:bg-blue-700
                           cursor-pointer"
                   />
-                  {isUploading && <span className="text-yellow-400 text-xs"><i className="fas fa-spinner fa-spin"></i> Processing...</span>}
+
                 </div>
                 <p className="text-[10px] text-gray-400 mt-1">
                   Upload a PDF or Image of the spec sheet. Gemini will extract details automatically.

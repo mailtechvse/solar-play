@@ -252,26 +252,52 @@ function drawResizeHandles(ctx, obj) {
  * Draw grid with 1m spacing
  */
 function drawGrid(ctx, canvas, scale, offsetX, offsetY) {
-  ctx.strokeStyle = currentTheme.grid;
-  ctx.lineWidth = 0.02;
-  ctx.globalAlpha = 0.5;
-
   const gridSize = 1; // 1 meter
+  const majorGridSize = 5; // Major grid every 5 meters
+
   const startX = Math.floor(-offsetX / scale / gridSize) * gridSize;
   const startY = Math.floor(-offsetY / scale / gridSize) * gridSize;
   const endX = startX + canvas.width / scale / gridSize + 2;
   const endY = startY + canvas.height / scale / gridSize + 2;
 
-  // Vertical lines
+  // Draw minor grid lines
+  ctx.strokeStyle = currentTheme.grid;
+  ctx.lineWidth = 0.03;
+  ctx.globalAlpha = 0.4;
+
   for (let x = startX; x < endX; x += gridSize) {
+    // Skip if this is a major grid line (will draw separately)
+    if (x % majorGridSize !== 0) {
+      ctx.beginPath();
+      ctx.moveTo(x, startY);
+      ctx.lineTo(x, endY);
+      ctx.stroke();
+    }
+  }
+
+  for (let y = startY; y < endY; y += gridSize) {
+    // Skip if this is a major grid line (will draw separately)
+    if (y % majorGridSize !== 0) {
+      ctx.beginPath();
+      ctx.moveTo(startX, y);
+      ctx.lineTo(endX, y);
+      ctx.stroke();
+    }
+  }
+
+  // Draw major grid lines (every 5 meters) - more visible
+  ctx.strokeStyle = currentTheme.grid;
+  ctx.lineWidth = 0.08;
+  ctx.globalAlpha = 0.8;
+
+  for (let x = Math.ceil(startX / majorGridSize) * majorGridSize; x < endX; x += majorGridSize) {
     ctx.beginPath();
     ctx.moveTo(x, startY);
     ctx.lineTo(x, endY);
     ctx.stroke();
   }
 
-  // Horizontal lines
-  for (let y = startY; y < endY; y += gridSize) {
+  for (let y = Math.ceil(startY / majorGridSize) * majorGridSize; y < endY; y += majorGridSize) {
     ctx.beginPath();
     ctx.moveTo(startX, y);
     ctx.lineTo(endX, y);
@@ -299,7 +325,7 @@ function drawObject(ctx, obj, isSelected) {
 
   const points = obj.points || obj.vertices;
 
-  if (obj.type === "polygon" && points && points.length > 0) {
+  if ((obj.type === "polygon" || obj.isPolygon) && points && points.length > 0) {
     // Draw Polygon
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
@@ -550,7 +576,7 @@ function drawShadow(ctx, obj, shadowVector, effectiveHeight = null) {
   const worldDx = shadowVector.x * height;
   const worldDy = shadowVector.y * height;
 
-  if (obj.type === "polygon" && obj.vertices && obj.vertices.length > 0) {
+  if ((obj.type === "polygon" || obj.isPolygon) && obj.vertices && obj.vertices.length > 0) {
     drawShadowPolygon(ctx, obj.x, obj.y, obj.vertices, worldDx, worldDy);
   } else {
     // For rectangles, we need to handle rotation carefully.
@@ -684,7 +710,7 @@ export function getShadowVector(sunTime, lat = 28.6, lon = 77.2, orientation = 0
   if (elevation < 0.1) return null;
 
   // Use solar-board.html formula for shadow length
-  const len = Math.min(3.0, (1 / Math.max(0.15, elevation)) * 0.7);
+  const len = (1 / Math.max(0.15, elevation)) * 0.7;
 
   return {
     x: -Math.cos(angle) * len,
