@@ -120,22 +120,47 @@ export default function RightPanel() {
 
             <div>
               <div className="flex items-center justify-between">
-                <label className="text-gray-500 font-medium">Height (h_z) (m)</label>
-                <span className="text-xs text-gray-500">{selectedObject.h_z?.toFixed(1) || "0"}m</span>
+                <label className="text-gray-500 font-medium">Object Height (Relative)</label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={selectedObject.relative_h || 0.1}
+                    onChange={(e) => {
+                      const newRelH = parseFloat(e.target.value);
+                      const oldRelH = selectedObject.relative_h || 0.1;
+                      const baseH = (selectedObject.h_z || 0) - oldRelH;
+                      updateObject(selectedObject.id, {
+                        relative_h: newRelH,
+                        h_z: baseH + newRelH
+                      });
+                    }}
+                    className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right"
+                  />
+                  <span className="text-xs text-gray-500">m</span>
+                </div>
               </div>
               <input
                 type="range"
                 min="0"
-                max="50"
-                step="0.5"
-                value={selectedObject.h_z || 0}
-                onChange={(e) =>
+                max="5"
+                step="0.1"
+                value={selectedObject.relative_h || 0.1}
+                onChange={(e) => {
+                  const newRelH = parseFloat(e.target.value);
+                  const oldRelH = selectedObject.relative_h || 0.1;
+                  const baseH = (selectedObject.h_z || 0) - oldRelH;
                   updateObject(selectedObject.id, {
-                    h_z: parseFloat(e.target.value),
-                  })
-                }
+                    relative_h: newRelH,
+                    h_z: baseH + newRelH
+                  });
+                }}
                 className="w-full mt-2 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
+              <div className="flex items-center justify-between mt-1">
+                <label className="text-gray-400 text-xs">Absolute Height (Ground)</label>
+                <span className="text-xs text-gray-700 font-bold">{selectedObject.h_z?.toFixed(2) || "0.00"}m</span>
+              </div>
             </div>
 
             <div>
@@ -152,19 +177,21 @@ export default function RightPanel() {
               />
             </div>
 
-            <div>
-              <label className="text-gray-500 font-medium">Cost (₹)</label>
-              <input
-                type="number"
-                value={selectedObject.cost?.toFixed(0) || "0"}
-                onChange={(e) =>
-                  updateObject(selectedObject.id, {
-                    cost: parseFloat(e.target.value),
-                  })
-                }
-                className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded focus:border-blue-500 focus:outline-none"
-              />
-            </div>
+            {['panel', 'inverter', 'battery', 'lt_panel', 'ht_panel', 'acdb', 'net_meter', 'gross_meter'].includes(selectedObject.type) && (
+              <div>
+                <label className="text-gray-500 font-medium">Cost (₹)</label>
+                <input
+                  type="number"
+                  value={selectedObject.cost?.toFixed(0) || "0"}
+                  onChange={(e) =>
+                    updateObject(selectedObject.id, {
+                      cost: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+            )}
 
             <div>
               <label className="text-gray-500 font-medium">Color</label>

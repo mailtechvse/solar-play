@@ -1,7 +1,7 @@
 import { useSolarStore } from "../stores/solarStore";
 import { supabase } from "../lib/supabase";
 import { screenToWorld, getObjectAtScreenPoint, calculateOrthogonalPath, getResizeHandleAtPoint } from "./canvas";
-import { createRectangle, createPolygon, closePath, simplifyPath, createPanelArray } from "./drawingTools";
+import { createRectangle, createPolygon, closePath, simplifyPath, createPanelArray, sortVerticesClockwise } from "./drawingTools";
 
 /**
  * Canvas Event Handler for Solar Architect
@@ -171,6 +171,28 @@ export const handleCanvasEvents = {
             if (o) this._dragStartPositions[id] = { x: o.x, y: o.y };
           });
 
+          // Identify children (objects on top of the selected object)
+          this._dragChildrenIds = [];
+          const children = store.objects.filter(other => {
+            if (other.id === obj.id) return false;
+            if (currentSelectedIds.includes(other.id)) return false; // Already selected
+
+            // Check if other is on top of obj
+            const cx = other.x + other.w / 2;
+            const cy = other.y + other.h / 2;
+
+            // Simple bounds check
+            // Also check if other is strictly higher (child)
+            return (cx >= obj.x && cx <= obj.x + obj.w &&
+              cy >= obj.y && cy <= obj.y + obj.h &&
+              (other.h_z || 0) > (obj.h_z || 0));
+          });
+
+          this._dragChildrenIds = children.map(c => c.id);
+          children.forEach(c => {
+            this._dragStartPositions[c.id] = { x: c.x, y: c.y };
+          });
+
           this._dragStartObjPos = { x: obj.x, y: obj.y }; // Keep for legacy/primary alignment
         } else {
           // Start Selection Box (Multi-select)
@@ -228,6 +250,9 @@ export const handleCanvasEvents = {
         } else if (objType === "panel") {
           newObject.watts = equipment.specifications?.watts || 550;
         }
+
+        // Ensure relative_h is set
+        newObject.relative_h = newObject.h_z;
 
         store.addObject(newObject);
         break;
@@ -438,7 +463,10 @@ export const handleCanvasEvents = {
 
       // Move additional objects
       if (this._dragStartPositions) {
-        (store.additionalSelectedIds || []).forEach(id => {
+        const idsToMove = [...(store.additionalSelectedIds || []), ...(this._dragChildrenIds || [])];
+        const uniqueIds = [...new Set(idsToMove)];
+
+        uniqueIds.forEach(id => {
           const startPos = this._dragStartPositions[id];
           if (startPos) {
             store.updateObject(id, {
@@ -448,6 +476,13 @@ export const handleCanvasEvents = {
           }
         });
       }
+
+      // Check layering
+      adjustObjectLayering(store, store.selectedObjectId);
+      if (store.additionalSelectedIds) {
+        store.additionalSelectedIds.forEach(id => adjustObjectLayering(store, id));
+      }
+
       return;
     }
 
@@ -725,13 +760,21 @@ export const handleCanvasEvents = {
     e.preventDefault();
     const store = useSolarStore.getState();
 
-    // Smoother zoom sensitivity (Reduced further)
-    const zoomFactor = e.deltaY > 0 ? 0.98 : 1.02;
-    const newScale = Math.max(5, Math.min(100, store.scale * zoomFactor));
+    // Magnitude-based zoom sensitivity
+    // Standard mouse wheel is ~100, trackpad is ~1-10
+    const sensitivity = 0.001;
+    const zoomFactor = Math.exp(-e.deltaY * sensitivity);
+
+    // Clamp zoom speed to avoid jumps
+    const safeZoomFactor = Math.max(0.8, Math.min(1.2, zoomFactor));
+
+    const newScale = Math.max(0.5, Math.min(500, store.scale * safeZoomFactor));
 
     const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+
+    // Zoom to Center of Canvas (User requested "keep it same")
+    const mouseX = rect.width / 2;
+    const mouseY = rect.height / 2;
 
     const worldPosBeforeZoom = screenToWorld(mouseX, mouseY, store.offsetX, store.offsetY, store.scale);
     const worldPosAfterZoom = screenToWorld(mouseX, mouseY, store.offsetX, store.offsetY, newScale);
@@ -748,6 +791,14 @@ export const handleCanvasEvents = {
    */
   onKeyDown(e) {
     const store = useSolarStore.getState();
+
+    // Prevent deletion if active element is an input
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")) {
+        return;
+      }
+    }
+
     if (e.key === "Delete" || e.key === "Backspace") {
       if (store.selectedObjectId) {
         store.deleteObject(store.selectedObjectId);
@@ -947,6 +998,417 @@ function calculateAlignment(x, y, w, h, objects, excludeId) {
 }
 
 /**
+ * Helper to adjust object height and render order based on parent structure
+ */
+function adjustObjectLayering(store, objectId) {
+  const objects = store.objects;
+  const obj = objects.find(o => o.id === objectId);
+  if (!obj) return;
+
+  // Find parent structure
+  const centerX = obj.x + obj.w / 2;
+  const centerY = obj.y + obj.h / 2;
+
+  let parent = null;
+  let maxHz = -1;
+
+  for (const other of objects) {
+    if (other.id === obj.id) continue;
+    // Only consider structures as parents
+    if (other.type !== 'structure' && other.type !== 'tinshed' && other.type !== 'polygon') continue;
+
+    // Check bounds
+    if (centerX >= other.x && centerX <= other.x + other.w &&
+      centerY >= other.y && centerY <= other.y + other.h) {
+      // If polygon, do precise check? For now bbox is fine.
+      if ((other.h_z || 0) > maxHz) {
+        maxHz = other.h_z || 0;
+        parent = other;
+      }
+    }
+  }
+
+  if (parent) {
+    const newHz = parent.h_z + (obj.relative_h || 0.1);
+
+    // If height changed, update it
+    if (obj.h_z !== newHz) {
+      store.updateObject(obj.id, { h_z: newHz });
+    }
+  } else {
+    // On ground - reset to relative height
+    const newHz = obj.relative_h || 0.1;
+    if (obj.h_z !== newHz) {
+      store.updateObject(obj.id, { h_z: newHz });
+    }
+  }
+}
+
+/**
+ * Extract polygon vertices from an image with transparent background
+ * Uses contour tracing to get the actual building outline (not just convex hull)
+ */
+async function extractPolygonFromImage(base64Image, alphaThreshold = 10) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const width = img.naturalWidth || img.width;
+      const height = img.naturalHeight || img.height;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      // Helper to check if pixel is opaque
+      const isOpaque = (x, y) => {
+        if (x < 0 || y < 0 || x >= width || y >= height) return false;
+        const idx = (y * width + x) * 4;
+        return data[idx + 3] > alphaThreshold;
+      };
+
+      // Find bounding box and first edge pixel
+      let minX = width, minY = height, maxX = 0, maxY = 0;
+      let startPixel = null;
+
+      for (let y = 0; y < height && !startPixel; y++) {
+        for (let x = 0; x < width; x++) {
+          if (isOpaque(x, y)) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+            if (!startPixel) {
+              startPixel = { x, y };
+            }
+          }
+        }
+      }
+
+      // Continue finding bounding box
+      for (let y = minY; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (isOpaque(x, y)) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+      }
+
+      if (!startPixel) {
+        resolve({ vertices: [], boundingBox: null });
+        return;
+      }
+
+      // Contour tracing using Moore-Neighbor algorithm
+      const contour = traceContour(isOpaque, startPixel, width, height);
+
+      // Simplify the contour to reduce points
+      const simplified = simplifyPolygon(contour, 3);
+
+      // Further simplify by removing collinear points
+      const finalVertices = removeCollinearPoints(simplified, 0.1);
+
+      resolve({
+        vertices: finalVertices,
+        boundingBox: { minX, minY, maxX, maxY },
+        width,
+        height
+      });
+    };
+
+    img.onerror = (err) => {
+      console.error('Failed to load image for polygon extraction:', err);
+      reject(err);
+    };
+
+    if (base64Image.startsWith('data:')) {
+      img.src = base64Image;
+    } else {
+      img.src = `data:image/png;base64,${base64Image}`;
+    }
+  });
+}
+
+/**
+ * Moore-Neighbor contour tracing algorithm
+ * Traces the outline of a shape by following edge pixels
+ */
+function traceContour(isOpaque, start, width, height) {
+  const contour = [];
+  // 8-directional neighbors: starting from left, going clockwise
+  // 0=left, 1=up-left, 2=up, 3=up-right, 4=right, 5=down-right, 6=down, 7=down-left
+  const dx = [-1, -1, 0, 1, 1, 1, 0, -1];
+  const dy = [0, -1, -1, -1, 0, 1, 1, 1];
+
+  let current = { ...start };
+  let dir = 0; // Start looking left
+  const maxIterations = width * height; // Safety limit
+  let iterations = 0;
+
+  do {
+    contour.push({ ...current });
+
+    // Find next boundary pixel by checking neighbors clockwise
+    let found = false;
+    const startDir = (dir + 5) % 8; // Start from opposite direction + 1
+
+    for (let i = 0; i < 8; i++) {
+      const checkDir = (startDir + i) % 8;
+      const nx = current.x + dx[checkDir];
+      const ny = current.y + dy[checkDir];
+
+      if (isOpaque(nx, ny)) {
+        current = { x: nx, y: ny };
+        dir = checkDir;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) break;
+    iterations++;
+  } while ((current.x !== start.x || current.y !== start.y) && iterations < maxIterations);
+
+  // Sample the contour if too many points (every Nth point)
+  if (contour.length > 500) {
+    const step = Math.ceil(contour.length / 200);
+    const sampled = [];
+    for (let i = 0; i < contour.length; i += step) {
+      sampled.push(contour[i]);
+    }
+    return sampled;
+  }
+
+  return contour;
+}
+
+/**
+ * Remove points that are nearly collinear with their neighbors
+ */
+function removeCollinearPoints(points, threshold) {
+  if (points.length <= 3) return points;
+
+  const result = [];
+  const n = points.length;
+
+  for (let i = 0; i < n; i++) {
+    const prev = points[(i - 1 + n) % n];
+    const curr = points[i];
+    const next = points[(i + 1) % n];
+
+    // Calculate cross product to determine collinearity
+    const cross = (curr.x - prev.x) * (next.y - prev.y) - (curr.y - prev.y) * (next.x - prev.x);
+    const len1 = Math.sqrt((curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2);
+    const len2 = Math.sqrt((next.x - curr.x) ** 2 + (next.y - curr.y) ** 2);
+
+    // Normalize cross product
+    const normalizedCross = Math.abs(cross) / (len1 * len2 + 0.001);
+
+    if (normalizedCross > threshold) {
+      result.push(curr);
+    }
+  }
+
+  return result.length >= 3 ? result : points;
+}
+
+/**
+ * Compute convex hull using Graham scan algorithm
+ */
+function computeConvexHull(points) {
+  if (points.length < 3) return points;
+
+  // Find the bottom-most point (or left-most in case of tie)
+  let start = points[0];
+  for (const p of points) {
+    if (p.y > start.y || (p.y === start.y && p.x < start.x)) {
+      start = p;
+    }
+  }
+
+  // Sort points by polar angle with respect to start
+  const sorted = points
+    .filter(p => p !== start)
+    .map(p => ({
+      point: p,
+      angle: Math.atan2(p.y - start.y, p.x - start.x)
+    }))
+    .sort((a, b) => a.angle - b.angle)
+    .map(p => p.point);
+
+  // Build convex hull
+  const hull = [start];
+
+  for (const p of sorted) {
+    // Remove points that make a clockwise turn
+    while (hull.length > 1 && crossProduct(hull[hull.length - 2], hull[hull.length - 1], p) <= 0) {
+      hull.pop();
+    }
+    hull.push(p);
+  }
+
+  return hull;
+}
+
+/**
+ * Cross product of vectors OA and OB
+ */
+function crossProduct(o, a, b) {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+/**
+ * Simplify polygon using Douglas-Peucker algorithm
+ */
+function simplifyPolygon(points, epsilon) {
+  if (points.length <= 3) return points;
+
+  // Find the point with maximum distance from line between first and last
+  let maxDist = 0;
+  let maxIdx = 0;
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const dist = perpendicularDistance(points[i], first, last);
+    if (dist > maxDist) {
+      maxDist = dist;
+      maxIdx = i;
+    }
+  }
+
+  // If max distance is greater than epsilon, recursively simplify
+  if (maxDist > epsilon) {
+    const left = simplifyPolygon(points.slice(0, maxIdx + 1), epsilon);
+    const right = simplifyPolygon(points.slice(maxIdx), epsilon);
+    return [...left.slice(0, -1), ...right];
+  }
+
+  return [first, last];
+}
+
+/**
+ * Calculate perpendicular distance from point to line segment
+ */
+function perpendicularDistance(point, lineStart, lineEnd) {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+
+  if (dx === 0 && dy === 0) {
+    return Math.sqrt((point.x - lineStart.x) ** 2 + (point.y - lineStart.y) ** 2);
+  }
+
+  const t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (dx * dx + dy * dy);
+  const clampedT = Math.max(0, Math.min(1, t));
+
+  const closestX = lineStart.x + clampedT * dx;
+  const closestY = lineStart.y + clampedT * dy;
+
+  return Math.sqrt((point.x - closestX) ** 2 + (point.y - closestY) ** 2);
+}
+
+/**
+ * Create a masked image from the base64 source and polygon vertices
+ * Vertices are in pixel coordinates relative to the original image
+ * Adds buffer to polygon to account for Gemini's imperfect edge detection
+ */
+async function createMaskedImage(base64Image, vertices, bufferPixels = 5) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      // Use actual image dimensions
+      const imgWidth = img.naturalWidth || img.width;
+      const imgHeight = img.naturalHeight || img.height;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = imgWidth;
+      canvas.height = imgHeight;
+      const ctx = canvas.getContext('2d');
+
+      // Calculate centroid for expanding polygon outward
+      let centroidX = 0, centroidY = 0;
+      vertices.forEach(v => {
+        centroidX += v.x;
+        centroidY += v.y;
+      });
+      centroidX /= vertices.length;
+      centroidY /= vertices.length;
+
+      // Expand vertices outward from centroid by buffer amount
+      const expandedVertices = vertices.map(v => {
+        const dx = v.x - centroidX;
+        const dy = v.y - centroidY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return { x: v.x, y: v.y };
+        const scale = (dist + bufferPixels) / dist;
+        return {
+          x: centroidX + dx * scale,
+          y: centroidY + dy * scale
+        };
+      });
+
+      // 1. Draw expanded Polygon Path for clipping
+      ctx.beginPath();
+      if (expandedVertices.length > 0) {
+        ctx.moveTo(expandedVertices[0].x, expandedVertices[0].y);
+        for (let i = 1; i < expandedVertices.length; i++) {
+          ctx.lineTo(expandedVertices[i].x, expandedVertices[i].y);
+        }
+      }
+      ctx.closePath();
+
+      // 2. Clip to path
+      ctx.clip();
+
+      // 3. Draw Image
+      ctx.drawImage(img, 0, 0);
+
+      // 4. Crop to bounding box with padding
+      let minX = imgWidth, minY = imgHeight, maxX = 0, maxY = 0;
+      expandedVertices.forEach(v => {
+        minX = Math.min(minX, v.x);
+        minY = Math.min(minY, v.y);
+        maxX = Math.max(maxX, v.x);
+        maxY = Math.max(maxY, v.y);
+      });
+
+      // Clamp to image bounds
+      minX = Math.max(0, Math.floor(minX));
+      minY = Math.max(0, Math.floor(minY));
+      maxX = Math.min(imgWidth, Math.ceil(maxX));
+      maxY = Math.min(imgHeight, Math.ceil(maxY));
+
+      const w = Math.max(1, maxX - minX);
+      const h = Math.max(1, maxY - minY);
+
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = w;
+      croppedCanvas.height = h;
+      const croppedCtx = croppedCanvas.getContext('2d');
+
+      croppedCtx.drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
+
+      resolve(croppedCanvas.toDataURL('image/png'));
+    };
+    img.onerror = (err) => {
+      console.error('Failed to load image for masking:', err);
+      reject(err);
+    };
+    // Handle both with and without data URL prefix
+    if (base64Image.startsWith('data:')) {
+      img.src = base64Image;
+    } else {
+      img.src = `data:image/png;base64,${base64Image}`;
+    }
+  });
+}
+
+/**
  * Handle AI Import Click
  */
 export async function handleAiImport(points, store) {
@@ -973,80 +1435,177 @@ export async function handleAiImport(points, store) {
 
       if (error) throw error;
 
-      if (data.feature && data.feature.vertices) {
+      // Handle new API format (data.building) or legacy format (data.feature)
+      let building = null;
+
+      if (data.building) {
+        // New format: building object from backend
+        console.log("AI Import: Using new building format", data.building.name);
+        building = { ...data.building };
+
+        // Check if we need to extract polygon from image (new approach)
+        if (data.rawPolygon?.extractPolygonFromImage && building.texture) {
+          console.log("AI Import: Extracting polygon from isolated PNG...");
+          try {
+            // Extract polygon vertices from the isolated building PNG
+            const extractionResult = await extractPolygonFromImage(building.texture);
+
+            if (extractionResult.vertices && extractionResult.vertices.length >= 3) {
+              console.log("AI Import: Extracted", extractionResult.vertices.length, "vertices from PNG");
+
+              // Get meters per pixel for coordinate conversion
+              const zoom = data.building.metadata?.sourceZoom || 20;
+              const metersPerPixel = data.building.metadata?.metersPerPixel ||
+                (156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom));
+
+              // Convert extracted pixel vertices to meters (relative to image center)
+              const imageCenter = {
+                x: extractionResult.width / 2,
+                y: extractionResult.height / 2
+              };
+
+              const verticesInMeters = extractionResult.vertices.map(v => ({
+                x: (v.x - imageCenter.x) * metersPerPixel,
+                y: (v.y - imageCenter.y) * metersPerPixel
+              }));
+
+              // Sort vertices clockwise
+              const sortedVertices = sortVerticesClockwise(verticesInMeters);
+
+              // Calculate bounding box for w/h
+              const xs = sortedVertices.map(v => v.x);
+              const ys = sortedVertices.map(v => v.y);
+              const minX = Math.min(...xs);
+              const minY = Math.min(...ys);
+              const maxX = Math.max(...xs);
+              const maxY = Math.max(...ys);
+
+              // Normalize vertices to start from 0,0
+              const normalizedVertices = sortedVertices.map(v => ({
+                x: v.x - minX,
+                y: v.y - minY
+              }));
+
+              // Update building with extracted polygon
+              building.vertices = normalizedVertices;
+              building.w = maxX - minX;
+              building.h = maxY - minY;
+              building.isPolygon = true;
+
+              // Crop the texture to just the building bounds
+              try {
+                const croppedTexture = await cropImageToBounds(
+                  building.texture,
+                  extractionResult.boundingBox
+                );
+                building.texture = croppedTexture;
+              } catch (cropErr) {
+                console.warn("Failed to crop texture:", cropErr);
+              }
+
+              console.log("AI Import: Building polygon extracted successfully");
+            } else {
+              console.warn("AI Import: No valid polygon extracted from PNG, using fallback rectangle");
+            }
+          } catch (extractErr) {
+            console.error("Failed to extract polygon from PNG:", extractErr);
+            // Fall back to rectangle-based vertices
+          }
+        } else if (data.satelliteImage && data.rawPolygon?.vertices) {
+          // Legacy: use raw polygon vertices to mask satellite image
+          try {
+            let base64Image = data.satelliteImage;
+            if (base64Image.startsWith('data:')) {
+              base64Image = base64Image.split(',')[1];
+            }
+
+            const maskedTexture = await createMaskedImage(base64Image, data.rawPolygon.vertices);
+            building.texture = maskedTexture;
+            console.log("AI Import: Created masked texture for building");
+          } catch (maskError) {
+            console.error("Failed to create masked texture:", maskError);
+          }
+        }
+
+        // Calculate position offset from canvas origin
+        const originLat = store.latitude;
+        const originLng = store.longitude;
+        const metersPerLat = 111320;
+        const metersPerLng = 111320 * Math.cos(originLat * Math.PI / 180);
+
+        const buildingLat = data.building.metadata?.coordinates?.lat || lat;
+        const buildingLng = data.building.metadata?.coordinates?.lng || lng;
+
+        const latDiff = buildingLat - originLat;
+        const lngDiff = buildingLng - originLng;
+
+        const offsetX = lngDiff * metersPerLng;
+        const offsetY = -latDiff * metersPerLat;
+
+        // Position building on canvas
+        building.x = offsetX - building.w / 2;
+        building.y = offsetY - building.h / 2;
+
+      } else if (data.feature && data.feature.vertices) {
+        // Legacy format: need to process vertices from pixels to meters
         const zoom = 20;
         const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
 
-        const vertices = data.feature.vertices.map(v => ({
+        console.log("AI Import: Using legacy feature format", { lat, zoom, metersPerPixel });
+
+        let texture = null;
+        if (data.image) {
+          texture = await createMaskedImage(data.image, data.feature.vertices);
+        }
+
+        let vertices = data.feature.vertices.map(v => ({
           x: (v.x - 400) * metersPerPixel,
           y: (v.y - 400) * metersPerPixel
         }));
 
-        // Use estimated height if available, default to 3.0
+        vertices = sortVerticesClockwise(vertices);
         const height = data.feature.height || 3.0;
 
         const polygon = createPolygon(vertices, "structure", height);
         if (polygon) {
-          // Adjust polygon position relative to the first point?
-          // No, each polygon is created relative to its own center (lat,lng).
-          // But we need to place them on the canvas relative to the canvas origin.
-          // The canvas origin (0,0) corresponds to `store.latitude, store.longitude`?
-          // Wait, `Canvas.jsx` renders map centered at `latitude, longitude`.
-          // If the user panned the map, `latitude` and `longitude` in store might be different from the import points.
-          // Actually, `MapOverlay` uses `latitude` and `longitude` from store as center.
-          // When user clicks, `lat, lng` are absolute.
-          // We need to convert absolute `lat, lng` to canvas coordinates relative to `store.latitude, store.longitude`.
-
-          // Canvas (0,0) is at `store.latitude, store.longitude`.
-          // Offset of point:
-          // dx = (point.lng - store.longitude) * metersPerDegreeLng
-          // dy = (store.latitude - point.lat) * metersPerDegreeLat (y is down)
-
-          // Wait, `metersPerPixel` calculation above is for the *static map image* fetched for that specific point.
-          // The vertices returned are relative to that point.
-          // So `polygon` vertices are relative to `point`.
-          // We need to add `point`'s offset from canvas origin.
+          if (texture) {
+            polygon.texture = texture;
+          }
 
           const originLat = store.latitude;
           const originLng = store.longitude;
-
-          const metersPerLat = 111320; // Approx
+          const metersPerLat = 111320;
           const metersPerLng = 111320 * Math.cos(originLat * Math.PI / 180);
 
           const latDiff = lat - originLat;
           const lngDiff = lng - originLng;
 
           const offsetX = lngDiff * metersPerLng;
-          const offsetY = -latDiff * metersPerLat; // Y is down, Lat increases up
+          const offsetY = -latDiff * metersPerLat;
 
-          // Shift polygon vertices
           polygon.x += offsetX;
           polygon.y += offsetY;
-          polygon.vertices = polygon.vertices.map(v => ({
-            x: v.x + offsetX,
-            y: v.y + offsetY
-          }));
 
-          // Re-calculate bbox? createPolygon already did it.
-          // But we shifted x/y.
-          // createPolygon returns x,y as minX, minY.
-          // So just shifting x,y and vertices is enough.
+          building = polygon;
+        }
+      }
 
-          store.addObject(polygon);
-          successCount++;
+      // Add building to canvas if successfully created
+      if (building) {
+        store.addObject(building);
+        successCount++;
 
-          // Center view on the imported polygon (using the last one if multiple)
-          if (store.canvas) {
-            const canvas = store.canvas;
-            const scale = store.scale;
-            const centerX = polygon.x + polygon.w / 2;
-            const centerY = polygon.y + polygon.h / 2;
+        // Center view on the imported building
+        if (store.canvas) {
+          const canvas = store.canvas;
+          const scale = store.scale;
+          const centerX = building.x + building.w / 2;
+          const centerY = building.y + building.h / 2;
 
-            const newOffsetX = (canvas.width / 2) - (centerX * scale);
-            const newOffsetY = (canvas.height / 2) - (centerY * scale);
+          const newOffsetX = (canvas.width / 2) - (centerX * scale);
+          const newOffsetY = (canvas.height / 2) - (centerY * scale);
 
-            store.setOffset(newOffsetX, newOffsetY);
-          }
+          store.setOffset(newOffsetX, newOffsetY);
         }
       }
     } catch (err) {
@@ -1063,5 +1622,34 @@ export async function handleAiImport(points, store) {
   } else {
     alert("No buildings detected.");
   }
+}
+
+/**
+ * Crop an image to the specified bounding box
+ */
+async function cropImageToBounds(base64Image, bounds) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const { minX, minY, maxX, maxY } = bounds;
+      const w = maxX - minX;
+      const h = maxY - minY;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(img, minX, minY, w, h, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+
+    if (base64Image.startsWith('data:')) {
+      img.src = base64Image;
+    } else {
+      img.src = `data:image/png;base64,${base64Image}`;
+    }
+  });
 }
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { useSolarStore } from '../stores/solarStore';
 
@@ -20,6 +20,11 @@ export default function MapOverlay({ onMapClick }) {
     const [map, setMap] = useState(null);
     const [selectedPoints, setSelectedPoints] = useState([]);
     const [isImporting, setIsImporting] = useState(false);
+
+    const center = useMemo(() => ({
+        lat: latitude || 20.5937,
+        lng: longitude || 78.9629
+    }), [latitude, longitude]);
 
     const onLoad = useCallback(function callback(map) {
         setMap(map);
@@ -58,7 +63,7 @@ export default function MapOverlay({ onMapClick }) {
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5 }}>
             <GoogleMap
                 mapContainerStyle={containerStyle}
-                center={{ lat: latitude || 20.5937, lng: longitude || 78.9629 }}
+                center={center}
                 zoom={mapSettings.zoom || 19}
                 onLoad={onLoad}
                 onUnmount={onUnmount}
@@ -97,6 +102,30 @@ export default function MapOverlay({ onMapClick }) {
                     Clear
                 </button>
             </div>
+
+            {/* Right Panel - Selected Buildings */}
+            {selectedPoints.length > 0 && (
+                <div className="absolute top-20 right-4 w-64 bg-gray-900/90 p-4 rounded shadow-lg border border-gray-700 text-white max-h-[80vh] overflow-y-auto">
+                    <h3 className="font-bold mb-3 text-sm border-b border-gray-700 pb-2">Selected Buildings</h3>
+                    <div className="space-y-2">
+                        {selectedPoints.map((pt, i) => (
+                            <div key={i} className="flex items-center justify-between bg-gray-800 p-2 rounded text-xs">
+                                <div>
+                                    <div className="font-bold text-blue-400">Building {i + 1}</div>
+                                    <div className="text-gray-400">{pt.lat.toFixed(6)}, {pt.lng.toFixed(6)}</div>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedPoints(prev => prev.filter((_, idx) => idx !== i))}
+                                    className="text-red-400 hover:text-red-300 p-1"
+                                    disabled={isImporting}
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

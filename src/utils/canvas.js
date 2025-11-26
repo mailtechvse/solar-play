@@ -115,18 +115,54 @@ export function renderCanvas(canvas, ctx, state) {
     effectiveHeights.set(obj.id, calculateEffectiveHeight(obj, objects, shadowVector));
   });
 
-  // First pass: Draw all shadows (so they appear behind objects of same/greater height)
+  // Group objects by height for proper shadow layering
+  const groups = [];
+  let currentGroup = [];
+  let currentHeight = -1;
+
+  sortedObjects.forEach(obj => {
+    const h = obj.h_z || 0;
+    if (currentGroup.length === 0 || Math.abs(h - currentHeight) < 0.01) {
+      currentGroup.push(obj);
+      currentHeight = h;
+    } else {
+      groups.push(currentGroup);
+      currentGroup = [obj];
+      currentHeight = h;
+    }
+  });
+  if (currentGroup.length > 0) groups.push(currentGroup);
+
+  // 0. Global Shadow Pass (Absolute Height) - Draw shadows for ELEVATED objects only
+  // This ensures the "ground part" of the shadow is drawn behind the parent structure
   if (shadowVector) {
-    sortedObjects.forEach((obj) => {
-      const effectiveHeight = effectiveHeights.get(obj.id) || obj.h_z;
-      drawShadow(ctx, obj, shadowVector, effectiveHeight);
+    sortedObjects.forEach(obj => {
+      const relH = obj.relative_h !== undefined ? obj.relative_h : obj.h_z;
+      const absH = obj.h_z || 0;
+
+      // Only draw absolute shadow if object is elevated
+      if (Math.abs(absH - relH) > 0.01) {
+        drawShadow(ctx, obj, shadowVector, absH);
+      }
     });
   }
 
-  // Second pass: Draw all objects (from lowest to highest)
-  sortedObjects.forEach((obj) => {
-    const isSelected = obj.id === selectedObjectId || (additionalSelectedIds || []).includes(obj.id);
-    drawObject(ctx, obj, isSelected);
+  // Render groups
+  groups.forEach(group => {
+    // 1. Draw Relative Shadows for ALL objects in this group
+    // This ensures shadows are drawn on top of lower layers (e.g. roof or ground)
+    if (shadowVector) {
+      group.forEach(obj => {
+        const relH = obj.relative_h !== undefined ? obj.relative_h : obj.h_z;
+        drawShadow(ctx, obj, shadowVector, relH);
+      });
+    }
+
+    // 2. Draw Objects for this group
+    group.forEach(obj => {
+      const isSelected = obj.id === selectedObjectId || (additionalSelectedIds || []).includes(obj.id);
+      drawObject(ctx, obj, isSelected);
+    });
   });
 
   // Draw sun direction indicator on the grid
@@ -307,6 +343,8 @@ function drawGrid(ctx, canvas, scale, offsetX, offsetY) {
   ctx.globalAlpha = 1;
 }
 
+const textureCache = new Map();
+
 /**
  * Draw individual object with proper styling based on type
  */
@@ -326,16 +364,36 @@ function drawObject(ctx, obj, isSelected) {
   const points = obj.points || obj.vertices;
 
   if ((obj.type === "polygon" || obj.isPolygon) && points && points.length > 0) {
-    // Draw Polygon
+    // Draw Polygon - vertices are relative to obj.x, obj.y
     ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
+    ctx.moveTo(obj.x + points[0].x, obj.y + points[0].y);
     for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].x, points[i].y);
+      ctx.lineTo(obj.x + points[i].x, obj.y + points[i].y);
     }
     ctx.closePath();
 
-    ctx.fillStyle = fillColor;
-    ctx.fill();
+    if (obj.texture) {
+      let img = textureCache.get(obj.id);
+      if (!img) {
+        img = new Image();
+        img.src = obj.texture;
+        textureCache.set(obj.id, img);
+      }
+
+      if (img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.clip(); // Clip to polygon path
+        // Draw image stretched to bounding box
+        ctx.drawImage(img, obj.x, obj.y, obj.w, obj.h);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+      }
+    } else {
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    }
 
     // Draw border
     ctx.strokeStyle = isSelected ? "#3b82f6" : adjustColor(fillColor, -40);
@@ -542,18 +600,24 @@ function calculateEffectiveHeight(obj, allObjects, shadowVector) {
         distToBottomEdge
       );
 
-      // If object is at edge and distance < base shadow distance
-      // Then shadow should add up
-      if (minEdgeDist < baseShadowDist) {
-        return baseHeight + obj.h_z;
+      // Calculate shadow length of the object on the roof
+      const relativeH = obj.h_z - baseHeight;
+      const objShadowLen = Math.sqrt(
+        Math.pow(shadowVector.x * relativeH, 2) +
+        Math.pow(shadowVector.y * relativeH, 2)
+      );
+
+      // If object shadow extends beyond the base edge, use absolute height
+      if (minEdgeDist < objShadowLen) {
+        return obj.h_z;
       } else {
-        // Object is in center, shadow only adds if it extends beyond base
-        return baseHeight + obj.h_z;
+        // Object shadow is contained on the roof, use relative height
+        return relativeH;
       }
     }
   }
 
-  return baseHeight + obj.h_z;
+  return obj.h_z; // Fallback to absolute height
 }
 
 /**
@@ -664,7 +728,12 @@ function drawShadow(ctx, obj, shadowVector, effectiveHeight = null) {
  * Projects polygon shadow based on offset
  */
 function drawShadowPolygon(ctx, baseX, baseY, vertices, dx, dy) {
-  // Draw the projected top face ("cap")
+  if (!vertices || vertices.length < 3) return;
+
+  // For complex polygons, draw the shadow as a filled shape
+  // that includes both the projected top and the connecting sides
+
+  // 1. First draw the projected top face ("cap")
   ctx.beginPath();
   for (let i = 0; i < vertices.length; i++) {
     const v = vertices[i];
@@ -676,8 +745,7 @@ function drawShadowPolygon(ctx, baseX, baseY, vertices, dx, dy) {
   ctx.closePath();
   ctx.fill();
 
-  // Draw connecting sides (extrusion)
-  // For each edge of the polygon, draw a quad connecting it to its projected edge
+  // 2. Draw connecting sides (extrusion) - each as separate fill
   for (let i = 0; i < vertices.length; i++) {
     const v1 = vertices[i];
     const v2 = vertices[(i + 1) % vertices.length];
@@ -703,14 +771,26 @@ function drawShadowPolygon(ctx, baseX, baseY, vertices, dx, dy) {
  * Based on solar-board.html implementation
  */
 export function getShadowVector(sunTime, lat = 28.6, lon = 77.2, orientation = 0) {
-  // Exact implementation from solar-board.html
+  // Hybrid approach:
+  // 1. Use Simple Linear Angle for Direction (User prefers "South below, North top" consistency)
   const angle = ((sunTime - 6) / 12) * Math.PI + (orientation * Math.PI / 180);
-  const elevation = Math.sin(((sunTime - 6) / 12) * Math.PI);
 
-  if (elevation < 0.1) return null;
+  // 2. Use SunCalc for Altitude (Length) to get physically reasonable shadow lengths
+  // We use June 21st (Summer Solstice) to ensure shadows are not excessively long (User complaint)
+  const date = new Date();
+  date.setMonth(5); // June
+  date.setDate(21);
+  const hours = Math.floor(sunTime);
+  const minutes = (sunTime - hours) * 60;
+  date.setHours(hours, minutes, 0, 0);
 
-  // Use solar-board.html formula for shadow length
-  const len = (1 / Math.max(0.15, elevation)) * 0.7;
+  const sunPos = SunCalc.getPosition(date, lat, lon);
+  const altitude = sunPos.altitude;
+
+  if (altitude < 0.05) return null;
+
+  const safeAlt = Math.max(0.1, altitude);
+  const len = 1 / Math.tan(safeAlt);
 
   return {
     x: -Math.cos(angle) * len,

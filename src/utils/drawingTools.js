@@ -329,3 +329,26 @@ function isPositionObstructed(x, y, w, h, objects, buffer = 0.1, baseHeight = 0)
   }
   return false;
 }
+
+/**
+ * Sort vertices clockwise around their centroid
+ */
+export function sortVerticesClockwise(vertices) {
+  if (!vertices || vertices.length < 3) return vertices;
+
+  // Calculate centroid
+  let cx = 0, cy = 0;
+  vertices.forEach(v => {
+    cx += v.x;
+    cy += v.y;
+  });
+  cx /= vertices.length;
+  cy /= vertices.length;
+
+  // Sort by angle
+  return [...vertices].sort((a, b) => {
+    const angleA = Math.atan2(a.y - cy, a.x - cx);
+    const angleB = Math.atan2(b.y - cy, b.x - cx);
+    return angleA - angleB;
+  });
+}

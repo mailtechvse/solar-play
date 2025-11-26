@@ -29,6 +29,7 @@ export const useSolarStore = create((set, get) => ({
 
   // Financial Parameters
   gridRate: 8.5,
+  exportRate: 3.0,
   baseLoad: 500,
   systemCost: 0,
   isCommercial: false,
@@ -42,6 +43,7 @@ export const useSolarStore = create((set, get) => ({
 
   // Financial setters
   setGridRate: (gridRate) => set({ gridRate }),
+  setExportRate: (exportRate) => set({ exportRate }),
   setBaseLoad: (baseLoad) => set({ baseLoad }),
   setSystemCost: (systemCost) => set({ systemCost }),
   setIsCommercial: (isCommercial) => set({ isCommercial }),
@@ -317,6 +319,7 @@ export const useSolarStore = create((set, get) => ({
     const state = get();
     const results = runSimulation(state.objects, state.wires, {
       gridRate: state.gridRate,
+      exportRate: state.exportRate,
       baseLoad: state.baseLoad,
       systemCost: state.systemCost,
       isCommercial: state.isCommercial,

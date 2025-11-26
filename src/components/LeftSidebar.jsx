@@ -5,6 +5,7 @@ import EquipmentPalette from "./EquipmentPalette";
 export default function LeftSidebar() {
   // Financial & Project State
   const gridRate = useSolarStore((state) => state.gridRate);
+  const exportRate = useSolarStore((state) => state.exportRate);
   const baseLoad = useSolarStore((state) => state.baseLoad);
   const systemCost = useSolarStore((state) => state.systemCost);
   const isCommercial = useSolarStore((state) => state.isCommercial);
@@ -14,6 +15,7 @@ export default function LeftSidebar() {
 
   // Actions
   const setGridRate = useSolarStore((state) => state.setGridRate);
+  const setExportRate = useSolarStore((state) => state.setExportRate);
   const setBaseLoad = useSolarStore((state) => state.setBaseLoad);
   const setSystemCost = useSolarStore((state) => state.setSystemCost);
   const setIsCommercial = useSolarStore((state) => state.setIsCommercial);
@@ -121,6 +123,16 @@ export default function LeftSidebar() {
               type="number"
               value={gridRate}
               onChange={(e) => setGridRate(parseFloat(e.target.value))}
+              step="0.1"
+              className="w-full mt-1 p-1 border rounded text-xs"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase">Export Rate (₹/Unit)</label>
+            <input
+              type="number"
+              value={exportRate}
+              onChange={(e) => setExportRate(parseFloat(e.target.value))}
               step="0.1"
               className="w-full mt-1 p-1 border rounded text-xs"
             />
