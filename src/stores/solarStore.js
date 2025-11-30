@@ -325,6 +325,8 @@ export const useSolarStore = create((set, get) => ({
       isCommercial: state.isCommercial,
       extraCostItems: state.extraCostItems,
       boqOverrides: state.boqOverrides,
+      latitude: state.latitude,
+      longitude: state.longitude,
     });
     set({
       evaluationData: results,

@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useRef, useState } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { formatCurrency, formatEnergy } from "../utils/simulation";
 import Chart from "chart.js/auto";
+import { adminService } from "../lib/supabase";
 
 export default function EvaluationModal() {
   const isOpen = useSolarStore((state) => state.isEvaluationOpen);
@@ -18,6 +19,115 @@ export default function EvaluationModal() {
   const [newItemName, setNewItemName] = useState("");
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemCost, setNewItemCost] = useState(0);
+
+  const [aiValidationResult, setAiValidationResult] = useState(null);
+  const [isValidating, setIsValidating] = useState(false);
+
+  const handleAiValidation = async () => {
+    setIsValidating(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validate-system`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          objects,
+          wires,
+          systemStats: {
+            dcCapacity: evaluationData.dcCapacity,
+            acCapacity: evaluationData.acCapacity,
+            batteryCapacity: evaluationData.batteryCapacity,
+            systemCost: evaluationData.systemCost
+          }
+        })
+      });
+      const data = await response.json();
+      setAiValidationResult(data);
+    } catch (error) {
+      console.error("AI Validation failed:", error);
+      alert("AI Validation failed. Please try again.");
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const [plans, setPlans] = useState([]);
+  const [additionalItems, setAdditionalItems] = useState([]);
+  const [addItemType, setAddItemType] = useState('custom'); // custom, item, plan
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      loadAdminData();
+    }
+  }, [isOpen]);
+
+  const loadAdminData = async () => {
+    try {
+      const [plns, items] = await Promise.all([
+        adminService.getPlans(),
+        adminService.getAdditionalItems()
+      ]);
+      setPlans(plns || []);
+      setAdditionalItems(items || []);
+    } catch (e) {
+      console.error("Failed to load admin data for BOQ", e);
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (addItemType === 'custom') {
+      if (!newItemName) return;
+      setBoqOverride(newItemName, { count: parseFloat(newItemQty), cost: parseFloat(newItemCost), type: 'custom' });
+    } else if (addItemType === 'item') {
+      const item = additionalItems.find(i => i.id === selectedItemId);
+      if (!item) return;
+      // Calculate cost with margin only (Tax is applied on total BOQ)
+      const finalCost = item.cost * (1 + (item.margin || 0) / 100);
+
+      setBoqOverride(item.name, { count: parseFloat(newItemQty), cost: finalCost, type: 'extra' });
+    } else if (addItemType === 'plan') {
+      const plan = plans.find(p => p.id === selectedPlanId);
+      if (!plan) return;
+
+      const pItems = await adminService.getPlanItems(plan.id);
+      const products = await adminService.getAllProducts();
+
+      pItems.forEach(pItem => {
+        let name = 'Unknown';
+        let cost = 0;
+
+        if (pItem.item_type === 'equipment') {
+          const prod = products.find(p => p.id === pItem.item_id);
+          if (prod) {
+            name = prod.name;
+            // Cost with margin only
+            cost = prod.cost * (1 + (prod.margin || 0) / 100);
+          }
+        } else {
+          const item = additionalItems.find(i => i.id === pItem.item_id);
+          if (item) {
+            name = item.name;
+            // Cost with margin only
+            cost = item.cost * (1 + (item.margin || 0) / 100);
+          }
+        }
+
+        if (name !== 'Unknown') {
+          setBoqOverride(name, { count: pItem.quantity, cost: cost, type: 'extra' });
+        }
+      });
+    }
+
+    setNewItemName("");
+    setNewItemQty(1);
+    setNewItemCost(0);
+    setShowAddItem(false);
+    setTimeout(() => runEvaluation(), 500);
+  };
 
   const chartRefs = {
     generation: useRef(null),
@@ -37,15 +147,7 @@ export default function EvaluationModal() {
     setTimeout(() => runEvaluation(), 0);
   };
 
-  const handleAddItem = () => {
-    if (!newItemName) return;
-    setBoqOverride(newItemName, { count: parseFloat(newItemQty), cost: parseFloat(newItemCost), type: 'custom' });
-    setNewItemName("");
-    setNewItemQty(1);
-    setNewItemCost(0);
-    setShowAddItem(false);
-    setTimeout(() => runEvaluation(), 0);
-  };
+
 
   const handleDeleteItem = (key) => {
     const item = evaluationData.boq[key];
@@ -400,22 +502,62 @@ export default function EvaluationModal() {
                 </button>
               </div>
 
+
+
               {/* Add Item Form */}
               {showAddItem && (
-                <div className="bg-gray-800 p-3 rounded mb-3 flex gap-2 items-end animate-fade-in border border-gray-600">
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-400 block mb-1">Item Name</label>
-                    <input type="text" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="e.g. Installation" />
+                <div className="bg-gray-800 p-3 rounded mb-3 flex flex-col gap-2 animate-fade-in border border-gray-600">
+                  <div className="flex gap-2 mb-2">
+                    <button onClick={() => setAddItemType('custom')} className={`text-xs px-2 py-1 rounded ${addItemType === 'custom' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>Custom</button>
+                    <button onClick={() => setAddItemType('item')} className={`text-xs px-2 py-1 rounded ${addItemType === 'item' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>From List</button>
+                    <button onClick={() => setAddItemType('plan')} className={`text-xs px-2 py-1 rounded ${addItemType === 'plan' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>Apply Plan</button>
                   </div>
-                  <div className="w-20">
-                    <label className="text-xs text-gray-400 block mb-1">Qty</label>
-                    <input type="number" value={newItemQty} onChange={e => setNewItemQty(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+
+                  <div className="flex gap-2 items-end">
+                    {addItemType === 'custom' && (
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-400 block mb-1">Item Name</label>
+                        <input type="text" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="e.g. Installation" />
+                      </div>
+                    )}
+
+                    {addItemType === 'item' && (
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-400 block mb-1">Select Item</label>
+                        <select value={selectedItemId} onChange={e => setSelectedItemId(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none">
+                          <option value="">-- Select --</option>
+                          {additionalItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {addItemType === 'plan' && (
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-400 block mb-1">Select Plan</label>
+                        <select value={selectedPlanId} onChange={e => setSelectedPlanId(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none">
+                          <option value="">-- Select --</option>
+                          {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {addItemType !== 'plan' && (
+                      <>
+                        <div className="w-20">
+                          <label className="text-xs text-gray-400 block mb-1">Qty</label>
+                          <input type="number" value={newItemQty} onChange={e => setNewItemQty(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                        </div>
+                        {addItemType === 'custom' && (
+                          <div className="w-24">
+                            <label className="text-xs text-gray-400 block mb-1">Cost (₹)</label>
+                            <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <button onClick={handleAddItem} className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded h-8 transition">Add</button>
                   </div>
-                  <div className="w-24">
-                    <label className="text-xs text-gray-400 block mb-1">Cost (₹)</label>
-                    <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} className="w-full bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
-                  </div>
-                  <button onClick={handleAddItem} className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded h-8 transition">Add</button>
                 </div>
               )}
 
@@ -530,7 +672,7 @@ export default function EvaluationModal() {
                   <tr className="border-b border-gray-600">
                     <th className="text-left py-2 px-2 text-gray-300">Year</th>
                     <th className="text-right py-2 px-2 text-gray-300">Generation</th>
-                    <th className="text-right py-2 px-2 text-gray-300">Annual Savings</th>
+                    <th className="text-right py-2 px-2 text-gray-300">Energy Savings</th>
                     <th className="text-right py-2 px-2 text-gray-300">AD Benefit</th>
                     <th className="text-right py-2 px-2 text-gray-300">Cumulative</th>
                     <th className="text-left py-2 px-2 text-gray-300">ROI Status</th>
@@ -546,7 +688,7 @@ export default function EvaluationModal() {
                             {formatEnergy(year.generation)}
                           </td>
                           <td className="text-right py-2 px-2 text-green-400">
-                            {formatCurrency(year.savings)}
+                            {formatCurrency(year.energySavings)}
                           </td>
                           <td className="text-right py-2 px-2 text-purple-400">
                             {year.adBenefit > 0 ? formatCurrency(year.adBenefit) : '-'}
@@ -583,7 +725,25 @@ export default function EvaluationModal() {
 
           {/* Validation Checks */}
           <div className="bg-gray-700 p-4 rounded">
-            <h3 className="text-white font-bold mb-3">Validation Checks</h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-white font-bold">Validation Checks</h3>
+              <button
+                onClick={handleAiValidation}
+                disabled={isValidating}
+                className={`text-xs px-3 py-1.5 rounded font-bold transition flex items-center gap-2 ${isValidating ? 'bg-gray-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}
+              >
+                {isValidating ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin"></i> Validating...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-robot"></i> Validate with AI
+                  </>
+                )}
+              </button>
+            </div>
+
             <div className="space-y-2">
               {evaluationData.validations?.map((v, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
@@ -606,6 +766,42 @@ export default function EvaluationModal() {
                 </div>
               ))}
             </div>
+
+            {/* AI Validation Result */}
+            {aiValidationResult && (
+              <div className="mt-4 border-t border-gray-600 pt-4 animate-fade-in">
+                <h4 className="text-purple-300 font-bold mb-2 flex items-center gap-2">
+                  <i className="fas fa-robot"></i> AI Validation Report
+                </h4>
+                <div className="bg-gray-800 p-3 rounded border border-purple-500/30">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className={`text-sm font-bold ${aiValidationResult.valid ? 'text-green-400' : 'text-red-400'}`}>
+                      {aiValidationResult.valid ? 'System Valid' : 'Issues Found'}
+                    </span>
+                    <span className="text-xs text-gray-400">Score: {aiValidationResult.score}/100</span>
+                  </div>
+                  <p className="text-sm text-gray-300 mb-3 italic">"{aiValidationResult.summary}"</p>
+
+                  {aiValidationResult.issues?.length > 0 && (
+                    <div className="mb-2">
+                      <div className="text-xs font-bold text-red-400 uppercase mb-1">Critical Issues</div>
+                      <ul className="list-disc list-inside text-xs text-red-300 space-y-1">
+                        {aiValidationResult.issues.map((issue, i) => <li key={i}>{issue}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {aiValidationResult.recommendations?.length > 0 && (
+                    <div>
+                      <div className="text-xs font-bold text-blue-400 uppercase mb-1">Recommendations</div>
+                      <ul className="list-disc list-inside text-xs text-blue-300 space-y-1">
+                        {aiValidationResult.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

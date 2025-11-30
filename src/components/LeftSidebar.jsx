@@ -428,6 +428,24 @@ export default function LeftSidebar() {
                 >
                   <div className="font-bold text-[10px]">ACDB Box</div>
                 </button>
+                <button
+                  onClick={() => handleAddMeter("vcb", "VCB", "#7f1d1d", 150000)}
+                  className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-red-100 text-red-900 hover:bg-red-200"
+                >
+                  <div className="font-bold text-[10px]">VCB</div>
+                </button>
+                <button
+                  onClick={() => handleAddMeter("acb", "ACB", "#334155", 80000)}
+                  className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-slate-200 text-slate-900 hover:bg-slate-300"
+                >
+                  <div className="font-bold text-[10px]">ACB</div>
+                </button>
+                <button
+                  onClick={() => handleAddMeter("bess", "BESS System", "#059669", 500000)}
+                  className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-emerald-100 text-emerald-900 hover:bg-emerald-200 col-span-2"
+                >
+                  <div className="font-bold text-[10px]">BESS (PCS+STS+Batt)</div>
+                </button>
               </div>
             )}
           </div>

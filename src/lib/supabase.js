@@ -317,3 +317,113 @@ export const projectService = {
     return data;
   },
 };
+
+// Admin Service
+export const adminService = {
+  // Check if user is admin
+  async checkIsAdmin() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data, error } = await supabase
+      .from('authorized_users')
+      .select('role')
+      .eq('email', user.email)
+      .single();
+
+    if (error || !data) return false;
+    return data.role === 'admin';
+  },
+
+  // Tax Slabs
+  async getTaxSlabs() {
+    const { data, error } = await supabase.from('tax_slabs').select('*').order('percentage');
+    if (error) throw error;
+    return data;
+  },
+  async createTaxSlab(slab) {
+    const { data, error } = await supabase.from('tax_slabs').insert([slab]).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async updateTaxSlab(id, updates) {
+    const { data, error } = await supabase.from('tax_slabs').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async deleteTaxSlab(id) {
+    const { error } = await supabase.from('tax_slabs').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Additional Items
+  async getAdditionalItems() {
+    const { data, error } = await supabase.from('additional_items').select('*').order('name');
+    if (error) throw error;
+    return data;
+  },
+  async createAdditionalItem(item) {
+    const { data, error } = await supabase.from('additional_items').insert([item]).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async updateAdditionalItem(id, updates) {
+    const { data, error } = await supabase.from('additional_items').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async deleteAdditionalItem(id) {
+    const { error } = await supabase.from('additional_items').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Plans
+  async getPlans() {
+    const { data, error } = await supabase.from('plans').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+  async createPlan(plan) {
+    const { data, error } = await supabase.from('plans').insert([plan]).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async updatePlan(id, updates) {
+    const { data, error } = await supabase.from('plans').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async deletePlan(id) {
+    const { error } = await supabase.from('plans').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Plan Items
+  async getPlanItems(planId) {
+    const { data, error } = await supabase
+      .from('plan_items')
+      .select('*')
+      .eq('plan_id', planId);
+    if (error) throw error;
+    return data;
+  },
+  async addPlanItem(item) {
+    const { data, error } = await supabase.from('plan_items').insert([item]).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async removePlanItem(id) {
+    const { error } = await supabase.from('plan_items').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Admin Product Management (Equipment with Margin)
+  async getAllProducts() {
+    const { data, error } = await supabase
+      .from('equipment')
+      .select('*, equipment_types(name)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  }
+};

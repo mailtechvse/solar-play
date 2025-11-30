@@ -72,161 +72,93 @@ serve(async (req) => {
         }
         const satelliteImageBase64 = btoa(binary)
 
-        // 2. Use Gemini to generate an isolated PNG of the building
-        // Then extract polygon from the generated image's non-transparent pixels
-        console.log('Generating isolated building image...')
+        // 2. Use Gemini to extract building polygon vertices directly
+        console.log('Extracting building polygon...')
+        const extractionPrompt = `
+You are an expert GIS analyst. Analyze this ${imageSize}x${imageSize} satellite image.
 
-        const isolationPrompt = `Edit this satellite image.
+The building is located at the CENTER of the image (coordinates: ${lat}, ${lng}).
+${buildingName ? `Building name: "${buildingName}"` : ''}
 
-TASK: Create a cutout of ONLY the building roof at the center.
+Your task:
+1. Identify the roof of the building at the exact center of the image.
+2. Trace the PRECISE outline of this roof polygon. Include ALL corners if the building is L-shaped, U-shaped, or has a complex footprint.
+3. Do NOT include shadows, trees, or adjacent structures in the polygon.
+4. Estimate the building height in meters based on shadow length and context.
 
-REMOVE completely (make transparent):
-- All trees and vegetation
-- All ground, pavement, and roads
-- The green sports field
-- All shadows on the ground
-- All other buildings except the center one
-- Everything that is not the center building's roof
+Return ONLY a valid JSON object:
+{
+  "name": "${buildingName || 'Building'}",
+  "vertices": [{"x": number, "y": number}, ...],
+  "height": number,
+  "type": "residential" | "commercial" | "industrial" | "mixed",
+  "roofType": "flat" | "sloped" | "complex"
+}
 
-KEEP only:
-- The single building roof located at the exact center of the image
-- Preserve its original colors and texture
-
-The output must be a PNG with the center building roof on a fully transparent background. Nothing else should be visible.`
-
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:streamGenerateContent?key=${geminiApiKey}`
-
-        let isolatedBuildingBase64: string | null = null
-        let buildingHeight = 10 // Default height
-
-        try {
-            console.log('Calling Gemini for image isolation...')
-            const isolationResponse = await fetch(geminiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{
-                        role: "user",
-                        parts: [
-                            { text: isolationPrompt },
-                            { inlineData: { mimeType: "image/png", data: satelliteImageBase64 } }
-                        ]
-                    }],
-                    generationConfig: {
-                        responseModalities: ["IMAGE", "TEXT"]
-                    }
-                })
-            })
-
-            console.log('Gemini response status:', isolationResponse.status)
-            const responseText = await isolationResponse.text()
-            console.log('Gemini response length:', responseText.length)
-
-            // Parse response - handle streaming format
-            let chunks: any[] = []
-            if (responseText.startsWith('[')) {
-                // JSON array format
-                chunks = JSON.parse(responseText)
-            } else {
-                // Newline-delimited JSON format
-                const lines = responseText.split('\n').filter(line => line.trim())
-                for (const line of lines) {
-                    try {
-                        chunks.push(JSON.parse(line))
-                    } catch { }
-                }
-            }
-
-            console.log('Parsed chunks count:', chunks.length)
-
-            // Extract image from response
-            for (const chunk of chunks) {
-                const parts = chunk?.candidates?.[0]?.content?.parts || []
-                for (const part of parts) {
-                    if (part.inlineData?.mimeType?.startsWith('image/')) {
-                        isolatedBuildingBase64 = part.inlineData.data
-                        console.log('Isolated building image generated, size:', isolatedBuildingBase64.length)
-                        break
-                    }
-                    // Also look for height estimate in text
-                    if (part.text) {
-                        console.log('Gemini text response:', part.text.substring(0, 200))
-                        const heightMatch = part.text.match(/(\d+)\s*(?:meters?|m)\s*(?:tall|high|height)/i)
-                        if (heightMatch) {
-                            buildingHeight = parseInt(heightMatch[1])
-                        }
-                    }
-                }
-                if (isolatedBuildingBase64) break
-            }
-
-            if (!isolatedBuildingBase64) {
-                console.log('No image in Gemini response, raw response preview:', responseText.substring(0, 500))
-            }
-        } catch (err) {
-            console.error('Image isolation failed:', err)
-        }
-
-        // 3. Get building metadata (height, type) with a simple text query
-        console.log('Getting building metadata...')
-        const metadataPrompt = `
-Look at the building at the center of this satellite image.
-Estimate:
-1. Building height in meters (based on shadow length)
-2. Building type (residential/commercial/industrial)
-3. Roof type (flat/sloped)
-
-Reply with ONLY JSON: {"height":number,"type":"string","roofType":"string"}
+The vertices should be pixel coordinates (0-${imageSize}) tracing the building outline clockwise.
 `
-        const metadataUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`
 
-        try {
-            const metadataResponse = await fetch(metadataUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: metadataPrompt },
-                            { inline_data: { mime_type: "image/png", data: satelliteImageBase64 } }
-                        ]
-                    }]
-                })
+        // Use gemini-1.5-pro for better vision capabilities
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`
+
+        const extractionResponse = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: extractionPrompt },
+                        { inline_data: { mime_type: "image/png", data: satelliteImageBase64 } }
+                    ]
+                }],
+                generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: 2048,
+                    responseMimeType: "application/json"
+                },
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                ]
             })
+        })
 
-            const metadataData = await metadataResponse.json()
-            const metadataText = metadataData.candidates?.[0]?.content?.parts?.[0]?.text || ''
-            const metadataMatch = metadataText.match(/\{[\s\S]*\}/)
-            if (metadataMatch) {
-                const metadata = JSON.parse(metadataMatch[0])
-                buildingHeight = metadata.height || buildingHeight
+        const extractionData = await extractionResponse.json()
+
+        if (extractionData.error) {
+            throw new Error(`Gemini extraction error: ${extractionData.error.message}`)
+        }
+
+        console.log('Gemini raw response:', JSON.stringify(extractionData).substring(0, 500))
+
+        const extractionText = extractionData.candidates?.[0]?.content?.parts?.[0]?.text
+        if (!extractionText) {
+            console.error('Full Gemini response:', JSON.stringify(extractionData))
+            throw new Error('No response from AI for polygon extraction')
+        }
+
+        // Parse JSON from response
+        let buildingData;
+        try {
+            buildingData = JSON.parse(extractionText);
+        } catch (e) {
+            // Try to find JSON block if mixed with text
+            const match = extractionText.match(/\{[\s\S]*\}/);
+            if (match) {
+                buildingData = JSON.parse(match[0]);
+            } else {
+                throw new Error('Failed to parse AI response');
             }
-        } catch (err) {
-            console.error('Metadata extraction failed:', err)
         }
 
-        // 4. Build polygon data - will be extracted from image on frontend
-        // For now, create a simple centered rectangle as placeholder
-        // The frontend will use the actual image bounds
-        const buildingData = {
-            name: buildingName || 'Building',
-            vertices: [
-                { x: imageSize * 0.2, y: imageSize * 0.2 },
-                { x: imageSize * 0.8, y: imageSize * 0.2 },
-                { x: imageSize * 0.8, y: imageSize * 0.8 },
-                { x: imageSize * 0.2, y: imageSize * 0.8 }
-            ],
-            height: buildingHeight,
-            type: 'commercial',
-            roofType: 'flat',
-            estimatedArea: 0,
-            // Flag to tell frontend to extract polygon from image
-            extractPolygonFromImage: true
-        }
+        // Use original satellite image as texture
+        const buildingTexture = `data:image/png;base64,${satelliteImageBase64}`
+        const maskImage = null; // No mask needed
 
-        const buildingTexture = isolatedBuildingBase64
-            ? `data:image/png;base64,${isolatedBuildingBase64}`
-            : `data:image/png;base64,${satelliteImageBase64}`
+        // Ensure extractPolygonFromImage is false
+        buildingData.extractPolygonFromImage = false;
 
         // 4. Convert pixel coordinates to meters (approximate)
         // At zoom 20, 1 pixel ≈ 0.15 meters at equator (varies by latitude)

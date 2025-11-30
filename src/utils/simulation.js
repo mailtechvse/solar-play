@@ -1,3 +1,5 @@
+import { SunCalc } from "./suncalc";
+
 /**
  * Solar System Simulation Engine
  * Calculates generation, efficiency, and 25-year ROI projections
@@ -15,10 +17,13 @@ export function runSimulation(objects, wires, params) {
   let {
     baseLoad = 500, // units/month
     gridRate = 8.5, // ₹/unit
+    exportRate = 3.0, // ₹/unit (Grid Input Rate)
     systemCost = 0, // ₹
     isCommercial = false,
     extraCostItems = [],
     boqOverrides = {},
+    latitude = 28.6,
+    longitude = 77.2,
   } = params;
 
   // Extract equipment from objects
@@ -75,7 +80,7 @@ export function runSimulation(objects, wires, params) {
   const { issues, validations } = validateSystem(objects, wires);
 
   // Calculate yearly shadow loss
-  const shadowLossPct = calculateYearlyShadowLoss(objects);
+  const shadowLossPct = calculateYearlyShadowLoss(objects, latitude, longitude);
   const shadowLossFactor = 1 - shadowLossPct;
 
   // Monthly simulation with seasonality
@@ -89,10 +94,132 @@ export function runSimulation(objects, wires, params) {
   const monthlyLossData = [];
 
   months.forEach((month, i) => {
-    // ... (loop content)
+    // Potential generation based on capacity, seasonality, and 4.5 peak sun hours average
+    const potentialGen = dcCapacityKwp * 4.5 * 30 * seasonality[i];
+    // Apply shadow loss and inverter efficiency
+    const actualGen = potentialGen * shadowLossFactor * inverterEfficiency;
+    const shadowLoss = potentialGen - (potentialGen * shadowLossFactor); // Loss due to shadow only
+
+    monthlyGenData.push(actualGen);
+    monthlyLossData.push(shadowLoss);
+    totalAnnualGen += actualGen;
+
+    // Net export/import
+    const netExport = actualGen - totalMonthlyLoad;
+
+    // Net metering: Savings + Income
+    // If exporting: Savings = Load * GridRate + Excess * ExportRate
+    // If importing: Savings = Gen * GridRate
+    let netMeteringBenefit = 0;
+    if (netExport > 0) {
+      netMeteringBenefit = (totalMonthlyLoad * gridRate) + (netExport * exportRate);
+    } else {
+      netMeteringBenefit = actualGen * gridRate;
+    }
+
+    // Gross metering: All generation sold at Export Rate (Grid Input Rate)
+    const grossMeteringIncome = actualGen * exportRate;
+
+    monthlyData.push({
+      month,
+      generation: actualGen,
+      load: totalMonthlyLoad,
+      netExport,
+      netMeteringIncome: netMeteringBenefit,
+      grossMeteringIncome,
+      shadowLoss,
+    });
+
+    // Accumulate total annual savings for ROI calculation
+    totalAnnualSavings += netMeteringBenefit;
   });
 
-  // ...
+  // 25-year projection
+  const yearlyData = [];
+  let cumulativeSavings = 0;
+  let breakEvenYear = null;
+  let breakEvenMonth = 0;
+
+  // Calculate performance score
+  const issueCount = issues.filter(i => i.startsWith('ERROR')).length;
+  const checklistScore = Math.max(0, 100 - (issueCount * 20));
+  const efficiencyScore = Math.round(checklistScore * shadowLossFactor);
+
+  // Optimization Suggestions
+  const suggestions = [];
+  if (shadowLossPct > 0.05) suggestions.push("High shadow loss detected (>5%). Consider relocating panels to reduce shading.");
+  if (acCapacityKw > 0 && dcCapacityKwp / acCapacityKw > 1.5) suggestions.push("Inverter undersized (DC:AC > 1.5). Consider upgrading inverter to avoid clipping.");
+  if (acCapacityKw > 0 && dcCapacityKwp / acCapacityKw < 1.0) suggestions.push("Inverter oversized (DC:AC < 1.0). You can add more panels to maximize inverter utilization.");
+  if (batteryCapacityKwh === 0 && !isCommercial) suggestions.push("Consider adding a battery for backup during power outages.");
+  if (efficiencyScore < 50) suggestions.push("System efficiency is low. Check connections and potential shading issues.");
+  if (dcCapacityKwp > 0 && acCapacityKw === 0) suggestions.push("No Inverter detected. System will not function.");
+
+  // Generate BOQ
+  const boq = {};
+  objects.forEach(o => {
+    // Skip grid/ground objects if needed, but usually we want everything
+    if (o.type === 'grid') return;
+    const key = o.label || o.type;
+    if (!boq[key]) boq[key] = { count: 0, cost: 0, type: o.type };
+    boq[key].count++;
+    boq[key].cost += (o.cost || 0);
+  });
+
+  // Add structure cost to BOQ
+  if (panels.length > 0) {
+    const rccCount = panels.filter(p => p.mountingType === 'rcc').length;
+    const tinCount = panels.filter(p => p.mountingType === 'tinshed').length;
+    const groundCount = panels.filter(p => !p.mountingType || p.mountingType === 'ground').length;
+
+    if (rccCount > 0) boq['Structure (RCC)'] = { count: rccCount, cost: rccCount * 1000, type: 'structure' };
+    if (tinCount > 0) boq['Structure (Tin Shed)'] = { count: tinCount, cost: tinCount * 1500, type: 'structure' };
+    if (groundCount > 0) boq['Structure (Ground)'] = { count: groundCount, cost: groundCount * 2000, type: 'structure' };
+  }
+
+  // Add extra items to BOQ
+  extraCostItems.forEach(item => {
+    boq[item.label] = { count: 1, cost: item.cost, type: 'extra' };
+  });
+
+  if (wires.length > 0) {
+    boq['DC/AC Wires'] = { count: wires.length, cost: wires.length * 500, type: 'wire' };
+  }
+
+  // Apply BOQ Overrides
+  if (boqOverrides) {
+    Object.entries(boqOverrides).forEach(([key, val]) => {
+      boq[key] = { ...(boq[key] || { type: 'custom' }), ...val };
+    });
+  }
+
+  // Calculate system cost from BOQ
+  if (!systemCost || systemCost === 0) {
+    let calculatedCost = 0;
+    Object.values(boq).forEach(item => {
+      calculatedCost += (item.cost || 0);
+    });
+
+    // If component cost is low (e.g. no costs assigned), use benchmark
+    if (calculatedCost < 1000 && dcCapacityKwp > 0) {
+      systemCost = dcCapacityKwp * 45000; // Fallback ₹45k/kWp
+    } else {
+      systemCost = calculatedCost;
+    }
+  }
+
+  // Battery Backup Estimation (assuming 50% depth of discharge for lead-acid or 80% for Li-ion, using 80% generic)
+  // Load is monthly. Avg hourly load = (TotalMonthlyLoad / 30 / 24) kW.
+  // Backup Hours = (Battery kWh * 0.8) / Avg Load kW
+  const avgLoadKw = totalMonthlyLoad > 0 ? (totalMonthlyLoad / 720) : 0;
+  const batteryBackupHours = (avgLoadKw > 0 && batteryCapacityKwh > 0) ? (batteryCapacityKwh * 0.8) / avgLoadKw : 0;
+
+  let bookValue = systemCost;
+
+  // Get panel degradation specs (use first panel or average)
+  const firstPanel = panels[0] || {};
+  const panelSpecs = typeof firstPanel.specifications === 'string' ? JSON.parse(firstPanel.specifications) : (firstPanel.specifications || {});
+  const degYear1 = (panelSpecs.degradation_year1 !== undefined ? panelSpecs.degradation_year1 : 2.0) / 100;
+  const degAnnual = (panelSpecs.degradation_annual !== undefined ? panelSpecs.degradation_annual : 0.4) / 100;
 
   for (let y = 1; y <= 25; y++) {
     // Calculate degradation factor
@@ -148,7 +275,8 @@ export function runSimulation(objects, wires, params) {
     yearlyData.push({
       year: y,
       generation: yearlyGen,
-      savings: yearlySavings,
+      savings: yearlySavings, // Total savings (Energy + AD)
+      energySavings: yearlySavings - adBenefit, // Pure energy savings
       adBenefit,
       cumulative: cumulativeSavings,
       roiStatus,
@@ -351,15 +479,43 @@ export function validateSystem(objects, wires) {
     validations.push('✓ Lightning arrestor present');
   }
 
+  // Check 5: Battery connections
+  const batteries = objects.filter(o => o.type === 'battery');
+  if (batteries.length > 0) {
+    batteries.forEach(battery => {
+      // Find connected inverter
+      let connectedInverter = null;
+      if (adj[battery.id]) {
+        adj[battery.id].forEach(neighborId => {
+          const neighbor = objects.find(o => o.id === neighborId);
+          if (neighbor && neighbor.type === 'inverter') {
+            connectedInverter = neighbor;
+          }
+        });
+      }
+
+      if (connectedInverter) {
+        const invType = connectedInverter.specifications?.inverter_type || 'on_grid';
+        if (invType !== 'hybrid') {
+          issues.push(`ERROR: Battery connected to non-hybrid inverter (${connectedInverter.label || 'Inverter'}). Use a Hybrid Inverter.`);
+        } else {
+          validations.push('✓ Battery connected to Hybrid Inverter');
+        }
+      }
+    });
+  }
+
   return { issues, validations };
 }
 
 /**
  * Calculate yearly shadow loss using Monte Carlo sampling
  * @param {Array} objects
+ * @param {number} lat
+ * @param {number} lon
  * @returns {number} Shadow loss percentage (0-1)
  */
-export function calculateYearlyShadowLoss(objects) {
+export function calculateYearlyShadowLoss(objects, lat, lon) {
   const panels = objects.filter(o => o.type === 'panel');
   if (panels.length === 0) return 0;
 
@@ -368,70 +524,84 @@ export function calculateYearlyShadowLoss(objects) {
 
   // Sample shadow loss across 12 months
   for (let month = 0; month < 12; month++) {
-    const shadowVector = getShadowVectorForMonth(month);
-    if (!shadowVector) continue;
+    // Use the 15th of each month
+    const date = new Date(new Date().getFullYear(), month, 15);
+
+    // Sample at 9am, 12pm, 3pm
+    const times = [9, 12, 15];
+    let monthShadowRatio = 0;
+
+    // Accumulate shadow area for this month
+    let monthTotalShadow = 0;
+    let monthSamples = 0;
+
+    times.forEach(hour => {
+      // Calculate UTC hour for the given solar hour at the location
+      // Solar Time = UTC + (lon / 15)
+      // UTC = Solar Time - (lon / 15)
+      const utcHour = hour - (lon / 15);
+      date.setUTCHours(Math.floor(utcHour), Math.floor((utcHour % 1) * 60), 0, 0);
+
+      const sunPos = SunCalc.getPosition(date, lat, lon);
+
+      // If sun is below horizon, ignore
+      if (sunPos.altitude <= 0) return;
+
+      const shadowLen = 1 / Math.tan(sunPos.altitude);
+      // Cap shadow length to avoid extreme values
+      const cappedLen = Math.min(shadowLen, 10);
+
+      // Calculate shadow vector
+      const dx = -Math.sin(sunPos.azimuth) * cappedLen;
+      const dy = Math.cos(sunPos.azimuth) * cappedLen;
+
+      panels.forEach(panel => {
+        // Monte Carlo sampling: random points on panel
+        const samples = 5;
+        let shadedPoints = 0;
+
+        for (let i = 0; i < samples; i++) {
+          const px = panel.x + Math.random() * panel.w;
+          const py = panel.y + Math.random() * panel.h;
+
+          // Check if in shadow from any object
+          let inShadow = false;
+          for (const obj of objects) {
+            if (obj.id === panel.id) continue;
+            if ((obj.h_z || 0) <= (panel.h_z || 0)) continue; // Only higher objects cast shadow
+
+            const dh = (obj.h_z || 0) - (panel.h_z || 0);
+            const shadowDx = dx * dh;
+            const shadowDy = dy * dh;
+
+            const sx = obj.x + shadowDx;
+            const sy = obj.y + shadowDy;
+
+            if (px >= sx && px <= sx + obj.w && py >= sy && py <= sy + obj.h) {
+              inShadow = true;
+              break;
+            }
+          }
+
+          if (inShadow) shadedPoints++;
+        }
+
+        monthTotalShadow += (shadedPoints / samples) * (panel.w * panel.h);
+      });
+      monthSamples++;
+    });
+
+    if (monthSamples > 0) {
+      totalShadowArea += monthTotalShadow / monthSamples;
+    }
 
     panels.forEach(panel => {
       totalPanelArea += panel.w * panel.h;
-
-      // Monte Carlo sampling: random points on panel
-      const samples = 5; // 5 samples per panel per month for performance
-      let shadedPoints = 0;
-
-      for (let i = 0; i < samples; i++) {
-        const px = panel.x + Math.random() * panel.w;
-        const py = panel.y + Math.random() * panel.h;
-
-        // Check if in shadow from any object
-        let inShadow = false;
-        for (const obj of objects) {
-          if (obj.id === panel.id) continue;
-          if (obj.h_z <= panel.h_z) continue; // Only higher objects cast shadow
-
-          const dh = obj.h_z - panel.h_z;
-          const dx = shadowVector.x * dh;
-          const dy = shadowVector.y * dh;
-
-          const sx = obj.x + dx;
-          const sy = obj.y + dy;
-
-          if (px >= sx && px <= sx + obj.w && py >= sy && py <= sy + obj.h) {
-            inShadow = true;
-            break;
-          }
-        }
-
-        if (inShadow) shadedPoints++;
-      }
-
-      totalShadowArea += (shadedPoints / samples) * (panel.w * panel.h);
     });
   }
 
+  // Average over 12 months (totalPanelArea was added 12 times)
   return totalPanelArea > 0 ? totalShadowArea / totalPanelArea : 0;
-}
-
-/**
- * Get shadow vector for a specific month
- * Simplified: assumes consistent elevation throughout day
- * @param {number} month - 0-11
- * @returns {Object} {x, y} shadow direction vector
- */
-function getShadowVectorForMonth(month) {
-  // Simplistic approach: use noon sun position
-  const sunTime = 12; // Noon
-  const angle = ((sunTime - 6) / 12) * Math.PI;
-  const elevation = Math.sin(((sunTime - 6) / 12) * Math.PI);
-
-  if (elevation < 0.1) return null;
-
-  // Shadow direction (opposite of sun)
-  // Removed arbitrary cap of 3.0 on shadow length
-  const len = (1 / Math.max(0.15, elevation)) * 0.7;
-  return {
-    x: -Math.cos(angle) * len,
-    y: -Math.sin(angle) * len,
-  };
 }
 
 /**

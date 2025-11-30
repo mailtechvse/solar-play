@@ -308,6 +308,74 @@ export default function RightPanel() {
             </div>
           )}
 
+          {/* VCB/ACB Specs */}
+          {(selectedObject.type === 'vcb' || selectedObject.type === 'acb') && (
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-gray-600 font-bold text-xs mb-2">Breaker Specs</h4>
+              <div>
+                <label className="text-gray-500 font-medium text-xs">Voltage Rating (kV)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.voltage_rating || (selectedObject.type === 'vcb' ? 11 : 0.415)}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, voltage_rating: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Current Rating (A)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.current_rating || (selectedObject.type === 'vcb' ? 630 : 800)}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, current_rating: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* BESS Specs */}
+          {selectedObject.type === 'bess' && (
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-gray-600 font-bold text-xs mb-2">BESS Configuration</h4>
+              <div>
+                <label className="text-gray-500 font-medium text-xs">PCS Rating (kW)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.pcs_rating || 100}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, pcs_rating: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">STS Rating (A)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.sts_rating || 200}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, sts_rating: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Battery Capacity (kWh)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.battery_capacity || 200}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, battery_capacity: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">MPPT Channels</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.mppt_channels || 1}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, mppt_channels: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Technical Specifications (Editable) */}
           {(selectedObject.type === 'panel' || selectedObject.type === 'inverter' || selectedObject.type === 'battery') && (
             <div className="border-t border-gray-200 pt-4">
@@ -348,6 +416,26 @@ export default function RightPanel() {
                 )}
                 {selectedObject.type === 'inverter' && (
                   <>
+                    <div>
+                      <label className="text-gray-500 font-medium text-xs">Inverter Type</label>
+                      <select
+                        value={selectedObject.specifications?.inverter_type || "on_grid"}
+                        onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, inverter_type: e.target.value } })}
+                        className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                      >
+                        <option value="on_grid">On-Grid Tie</option>
+                        <option value="hybrid">Hybrid</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-500 font-medium text-xs">Output Voltage (V)</label>
+                      <input
+                        type="number"
+                        value={selectedObject.specifications?.output_voltage || 230}
+                        onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, output_voltage: parseFloat(e.target.value) } })}
+                        className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                      />
+                    </div>
                     <div>
                       <label className="text-gray-500 font-medium text-xs">Efficiency (%)</label>
                       <input

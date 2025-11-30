@@ -34,6 +34,7 @@ export const handleCanvasEvents = {
     if (store.aiImportMode && store.mapSettings?.mapImage && store.mapSettings.mapOverlayActive) {
       const zoom = store.mapSettings.zoom || 20;
       const lat = store.latitude;
+      const lng = store.longitude;
       const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
 
       const mapWidthMeters = 800 * metersPerPixel;
@@ -43,11 +44,16 @@ export const handleCanvasEvents = {
       if (worldPos.x >= -mapWidthMeters / 2 && worldPos.x <= mapWidthMeters / 2 &&
         worldPos.y >= -mapHeightMeters / 2 && worldPos.y <= mapHeightMeters / 2) {
 
-        // Convert to pixel coordinates (0-800)
-        const pixelX = (worldPos.x + mapWidthMeters / 2) / metersPerPixel;
-        const pixelY = (worldPos.y + mapHeightMeters / 2) / metersPerPixel;
+        // Calculate clicked lat/lng
+        // 1 meter approx 1/111320 degrees
+        const metersPerDegreeLat = 111320;
+        const metersPerDegreeLng = 111320 * Math.cos(lat * Math.PI / 180);
 
-        handleAiImport(pixelX, pixelY, store);
+        // Canvas Y is down (positive), so +Y means South (decreasing Lat)
+        const clickedLat = lat - (worldPos.y / metersPerDegreeLat);
+        const clickedLng = lng + (worldPos.x / metersPerDegreeLng);
+
+        handleAiImport({ lat: clickedLat, lng: clickedLng }, store);
         return;
       }
     }
@@ -245,10 +251,36 @@ export const handleCanvasEvents = {
         if (objType === "inverter") {
           newObject.capKw = equipment.specifications?.capacity_kw || 3;
           newObject.subtype = equipment.specifications?.inverter_type || "string";
+
+          // Default Inverter Settings
+          newObject.specifications = {
+            ...newObject.specifications,
+            inverter_type: equipment.specifications?.inverter_type || "on_grid",
+            output_voltage: equipment.specifications?.output_voltage || 230,
+            efficiency: equipment.specifications?.efficiency || 97.5,
+            max_dc_input: equipment.specifications?.max_dc_input || 600
+          };
         } else if (objType === "battery") {
           newObject.capKwh = equipment.specifications?.capacity_kwh || 5;
         } else if (objType === "panel") {
           newObject.watts = equipment.specifications?.watts || 550;
+        } else if (objType === "vcb") {
+          newObject.specifications = {
+            voltage_rating: 11, // kV
+            current_rating: 630 // A
+          };
+        } else if (objType === "acb") {
+          newObject.specifications = {
+            voltage_rating: 0.415, // kV
+            current_rating: 800 // A
+          };
+        } else if (objType === "bess") {
+          newObject.specifications = {
+            pcs_rating: 100, // kW
+            sts_rating: 200, // A
+            battery_capacity: 200, // kWh
+            mppt_channels: 1
+          };
         }
 
         // Ensure relative_h is set
@@ -1045,10 +1077,13 @@ function adjustObjectLayering(store, objectId) {
 }
 
 /**
- * Extract polygon vertices from an image with transparent background
- * Uses contour tracing to get the actual building outline (not just convex hull)
+ * Extract polygon vertices from an image using OpenCV-style approach:
+ * 1. Convert to grayscale
+ * 2. Threshold (invert so building is white on black)
+ * 3. Find contours
+ * 4. Approximate polygon with epsilon based on arc length
  */
-async function extractPolygonFromImage(base64Image, alphaThreshold = 10) {
+async function extractPolygonFromImage(base64Image) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -1063,58 +1098,77 @@ async function extractPolygonFromImage(base64Image, alphaThreshold = 10) {
       const imageData = ctx.getImageData(0, 0, width, height);
       const data = imageData.data;
 
-      // Helper to check if pixel is opaque
-      const isOpaque = (x, y) => {
-        if (x < 0 || y < 0 || x >= width || y >= height) return false;
-        const idx = (y * width + x) * 4;
-        return data[idx + 3] > alphaThreshold;
-      };
-
-      // Find bounding box and first edge pixel
-      let minX = width, minY = height, maxX = 0, maxY = 0;
-      let startPixel = null;
-
-      for (let y = 0; y < height && !startPixel; y++) {
-        for (let x = 0; x < width; x++) {
-          if (isOpaque(x, y)) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-            if (!startPixel) {
-              startPixel = { x, y };
-            }
-          }
+      // Step 1: Convert to grayscale
+      const gray = new Uint8Array(width * height);
+      for (let i = 0; i < width * height; i++) {
+        const idx = i * 4;
+        // Standard grayscale conversion
+        gray[i] = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]);
+        // If pixel is transparent, treat as white (background)
+        if (data[idx + 3] < 128) {
+          gray[i] = 255;
         }
       }
 
-      // Continue finding bounding box
-      for (let y = minY; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (isOpaque(x, y)) {
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-          }
-        }
+      // Step 2: Threshold with auto-detection
+      // We want to find the object.
+      // Try assuming object is Dark (Mask: Black on White)
+      // Invert: dark pixels (< 128) become white (255)
+      const binary = new Uint8Array(width * height);
+      for (let i = 0; i < gray.length; i++) {
+        binary[i] = gray[i] < 128 ? 255 : 0;
       }
 
-      if (!startPixel) {
+      // Step 3: Find external contour
+      let contour = findExternalContour(binary, width, height);
+
+      // Check if contour is the frame (bounding box is full image)
+      let checkMinX = width, checkMinY = height, checkMaxX = 0, checkMaxY = 0;
+      for (const p of contour) {
+        checkMinX = Math.min(checkMinX, p.x);
+        checkMinY = Math.min(checkMinY, p.y);
+        checkMaxX = Math.max(checkMaxX, p.x);
+        checkMaxY = Math.max(checkMaxY, p.y);
+      }
+      const bboxW = checkMaxX - checkMinX;
+      const bboxH = checkMaxY - checkMinY;
+      const isFrame = bboxW > width * 0.95 && bboxH > height * 0.95;
+
+      if (isFrame || contour.length < 3) {
+        console.log("extractPolygonFromImage: Contour is frame/invalid, inverting threshold...");
+        // Try assuming object is Light (Mask: White on Black)
+        for (let i = 0; i < gray.length; i++) {
+          binary[i] = gray[i] > 128 ? 255 : 0;
+        }
+        contour = findExternalContour(binary, width, height);
+      }
+
+      console.log("extractPolygonFromImage: raw contour points=", contour.length);
+
+      if (contour.length < 3) {
+        console.warn("extractPolygonFromImage: No valid contour found");
         resolve({ vertices: [], boundingBox: null });
         return;
       }
 
-      // Contour tracing using Moore-Neighbor algorithm
-      const contour = traceContour(isOpaque, startPixel, width, height);
+      // Step 4: Approximate polygon (like cv2.approxPolyDP)
+      // epsilon = 0.005 * arcLength
+      const arcLength = calculateArcLength(contour);
+      const epsilon = 0.005 * arcLength;
+      const approx = approxPolyDP(contour, epsilon);
+      console.log("extractPolygonFromImage: simplified to", approx.length, "vertices (epsilon=", epsilon.toFixed(2), ")");
 
-      // Simplify the contour to reduce points
-      const simplified = simplifyPolygon(contour, 3);
-
-      // Further simplify by removing collinear points
-      const finalVertices = removeCollinearPoints(simplified, 0.1);
+      // Calculate bounding box
+      let minX = width, minY = height, maxX = 0, maxY = 0;
+      for (const p of approx) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
 
       resolve({
-        vertices: finalVertices,
+        vertices: approx,
         boundingBox: { minX, minY, maxX, maxY },
         width,
         height
@@ -1135,35 +1189,58 @@ async function extractPolygonFromImage(base64Image, alphaThreshold = 10) {
 }
 
 /**
- * Moore-Neighbor contour tracing algorithm
- * Traces the outline of a shape by following edge pixels
+ * Find external contour from binary image (white object on black background)
+ * Simplified version of Suzuki-Abe border following algorithm
  */
-function traceContour(isOpaque, start, width, height) {
+function findExternalContour(binary, width, height) {
   const contour = [];
-  // 8-directional neighbors: starting from left, going clockwise
-  // 0=left, 1=up-left, 2=up, 3=up-right, 4=right, 5=down-right, 6=down, 7=down-left
-  const dx = [-1, -1, 0, 1, 1, 1, 0, -1];
-  const dy = [0, -1, -1, -1, 0, 1, 1, 1];
 
-  let current = { ...start };
-  let dir = 0; // Start looking left
-  const maxIterations = width * height; // Safety limit
-  let iterations = 0;
+  // Find first white pixel (top-left most)
+  let startX = -1, startY = -1;
+  outer: for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (binary[y * width + x] === 255) {
+        startX = x;
+        startY = y;
+        break outer;
+      }
+    }
+  }
+
+  if (startX === -1) return contour;
+
+  // Helper to check if pixel is foreground
+  const isFg = (x, y) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return false;
+    return binary[y * width + x] === 255;
+  };
+
+  // Moore-Neighbor tracing with proper backtrack direction
+  // Direction: 0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE
+  const dx = [1, 1, 0, -1, -1, -1, 0, 1];
+  const dy = [0, 1, 1, 1, 0, -1, -1, -1];
+
+  let x = startX, y = startY;
+  let dir = 7; // Start by looking NE (came from W)
+
+  const maxIter = width * height * 2;
+  let iter = 0;
 
   do {
-    contour.push({ ...current });
+    contour.push({ x, y });
 
-    // Find next boundary pixel by checking neighbors clockwise
+    // Find next boundary pixel
     let found = false;
-    const startDir = (dir + 5) % 8; // Start from opposite direction + 1
+    const startDir = (dir + 5) % 8; // Backtrack and go clockwise
 
     for (let i = 0; i < 8; i++) {
       const checkDir = (startDir + i) % 8;
-      const nx = current.x + dx[checkDir];
-      const ny = current.y + dy[checkDir];
+      const nx = x + dx[checkDir];
+      const ny = y + dy[checkDir];
 
-      if (isOpaque(nx, ny)) {
-        current = { x: nx, y: ny };
+      if (isFg(nx, ny)) {
+        x = nx;
+        y = ny;
         dir = checkDir;
         found = true;
         break;
@@ -1171,12 +1248,12 @@ function traceContour(isOpaque, start, width, height) {
     }
 
     if (!found) break;
-    iterations++;
-  } while ((current.x !== start.x || current.y !== start.y) && iterations < maxIterations);
+    iter++;
+  } while ((x !== startX || y !== startY) && iter < maxIter);
 
-  // Sample the contour if too many points (every Nth point)
-  if (contour.length > 500) {
-    const step = Math.ceil(contour.length / 200);
+  // Sample if too many points
+  if (contour.length > 1000) {
+    const step = Math.ceil(contour.length / 500);
     const sampled = [];
     for (let i = 0; i < contour.length; i += step) {
       sampled.push(contour[i]);
@@ -1188,104 +1265,42 @@ function traceContour(isOpaque, start, width, height) {
 }
 
 /**
- * Remove points that are nearly collinear with their neighbors
+ * Calculate arc length (perimeter) of a polygon
  */
-function removeCollinearPoints(points, threshold) {
-  if (points.length <= 3) return points;
-
-  const result = [];
-  const n = points.length;
-
-  for (let i = 0; i < n; i++) {
-    const prev = points[(i - 1 + n) % n];
-    const curr = points[i];
-    const next = points[(i + 1) % n];
-
-    // Calculate cross product to determine collinearity
-    const cross = (curr.x - prev.x) * (next.y - prev.y) - (curr.y - prev.y) * (next.x - prev.x);
-    const len1 = Math.sqrt((curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2);
-    const len2 = Math.sqrt((next.x - curr.x) ** 2 + (next.y - curr.y) ** 2);
-
-    // Normalize cross product
-    const normalizedCross = Math.abs(cross) / (len1 * len2 + 0.001);
-
-    if (normalizedCross > threshold) {
-      result.push(curr);
-    }
+function calculateArcLength(points) {
+  let length = 0;
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % points.length];
+    length += Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
   }
-
-  return result.length >= 3 ? result : points;
+  return length;
 }
 
 /**
- * Compute convex hull using Graham scan algorithm
+ * Douglas-Peucker polygon approximation (like cv2.approxPolyDP)
  */
-function computeConvexHull(points) {
-  if (points.length < 3) return points;
+function approxPolyDP(points, epsilon) {
+  if (points.length <= 2) return points;
 
-  // Find the bottom-most point (or left-most in case of tie)
-  let start = points[0];
-  for (const p of points) {
-    if (p.y > start.y || (p.y === start.y && p.x < start.x)) {
-      start = p;
-    }
-  }
-
-  // Sort points by polar angle with respect to start
-  const sorted = points
-    .filter(p => p !== start)
-    .map(p => ({
-      point: p,
-      angle: Math.atan2(p.y - start.y, p.x - start.x)
-    }))
-    .sort((a, b) => a.angle - b.angle)
-    .map(p => p.point);
-
-  // Build convex hull
-  const hull = [start];
-
-  for (const p of sorted) {
-    // Remove points that make a clockwise turn
-    while (hull.length > 1 && crossProduct(hull[hull.length - 2], hull[hull.length - 1], p) <= 0) {
-      hull.pop();
-    }
-    hull.push(p);
-  }
-
-  return hull;
-}
-
-/**
- * Cross product of vectors OA and OB
- */
-function crossProduct(o, a, b) {
-  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-}
-
-/**
- * Simplify polygon using Douglas-Peucker algorithm
- */
-function simplifyPolygon(points, epsilon) {
-  if (points.length <= 3) return points;
-
-  // Find the point with maximum distance from line between first and last
+  // Find point with max distance from line between first and last
   let maxDist = 0;
   let maxIdx = 0;
   const first = points[0];
   const last = points[points.length - 1];
 
   for (let i = 1; i < points.length - 1; i++) {
-    const dist = perpendicularDistance(points[i], first, last);
+    const dist = pointToLineDistance(points[i], first, last);
     if (dist > maxDist) {
       maxDist = dist;
       maxIdx = i;
     }
   }
 
-  // If max distance is greater than epsilon, recursively simplify
+  // If max distance > epsilon, recursively simplify
   if (maxDist > epsilon) {
-    const left = simplifyPolygon(points.slice(0, maxIdx + 1), epsilon);
-    const right = simplifyPolygon(points.slice(maxIdx), epsilon);
+    const left = approxPolyDP(points.slice(0, maxIdx + 1), epsilon);
+    const right = approxPolyDP(points.slice(maxIdx), epsilon);
     return [...left.slice(0, -1), ...right];
   }
 
@@ -1293,24 +1308,26 @@ function simplifyPolygon(points, epsilon) {
 }
 
 /**
- * Calculate perpendicular distance from point to line segment
+ * Point to line segment distance
  */
-function perpendicularDistance(point, lineStart, lineEnd) {
+function pointToLineDistance(point, lineStart, lineEnd) {
   const dx = lineEnd.x - lineStart.x;
   const dy = lineEnd.y - lineStart.y;
+  const lenSq = dx * dx + dy * dy;
 
-  if (dx === 0 && dy === 0) {
+  if (lenSq === 0) {
     return Math.sqrt((point.x - lineStart.x) ** 2 + (point.y - lineStart.y) ** 2);
   }
 
-  const t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (dx * dx + dy * dy);
-  const clampedT = Math.max(0, Math.min(1, t));
+  let t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
 
-  const closestX = lineStart.x + clampedT * dx;
-  const closestY = lineStart.y + clampedT * dy;
+  const projX = lineStart.x + t * dx;
+  const projY = lineStart.y + t * dy;
 
-  return Math.sqrt((point.x - closestX) ** 2 + (point.y - closestY) ** 2);
+  return Math.sqrt((point.x - projX) ** 2 + (point.y - projY) ** 2);
 }
+
 
 /**
  * Create a masked image from the base64 source and polygon vertices
@@ -1444,11 +1461,14 @@ export async function handleAiImport(points, store) {
         building = { ...data.building };
 
         // Check if we need to extract polygon from image (new approach)
-        if (data.rawPolygon?.extractPolygonFromImage && building.texture) {
-          console.log("AI Import: Extracting polygon from isolated PNG...");
+        // Use mask if available. Do NOT fallback to texture as it produces garbage.
+        const imageToExtract = data.maskImage;
+
+        if (data.rawPolygon?.extractPolygonFromImage && imageToExtract) {
+          console.log("AI Import: Extracting polygon from image/mask...");
           try {
-            // Extract polygon vertices from the isolated building PNG
-            const extractionResult = await extractPolygonFromImage(building.texture);
+            // Extract polygon vertices from the isolated building PNG or Mask
+            const extractionResult = await extractPolygonFromImage(imageToExtract);
 
             if (extractionResult.vertices && extractionResult.vertices.length >= 3) {
               console.log("AI Import: Extracted", extractionResult.vertices.length, "vertices from PNG");
@@ -1503,9 +1523,14 @@ export async function handleAiImport(points, store) {
                 console.warn("Failed to crop texture:", cropErr);
               }
 
-              console.log("AI Import: Building polygon extracted successfully");
+              console.log("AI Import: Building polygon extracted successfully", {
+                vertices: building.vertices.length,
+                w: building.w,
+                h: building.h,
+                isPolygon: building.isPolygon
+              });
             } else {
-              console.warn("AI Import: No valid polygon extracted from PNG, using fallback rectangle");
+              console.warn("AI Import: No valid polygon extracted from PNG, vertices:", extractionResult.vertices);
             }
           } catch (extractErr) {
             console.error("Failed to extract polygon from PNG:", extractErr);
@@ -1625,7 +1650,7 @@ export async function handleAiImport(points, store) {
 }
 
 /**
- * Crop an image to the specified bounding box
+ * Crop an image to the specified bounding box and convert white to transparent
  */
 async function cropImageToBounds(base64Image, bounds) {
   return new Promise((resolve, reject) => {
@@ -1641,6 +1666,20 @@ async function cropImageToBounds(base64Image, bounds) {
       const ctx = canvas.getContext('2d');
 
       ctx.drawImage(img, minX, minY, w, h, 0, 0, w, h);
+
+      // Convert white/near-white pixels to transparent
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        // If pixel is white or near-white, make it transparent
+        if (r > 245 && g > 245 && b > 245) {
+          data[i + 3] = 0; // Set alpha to 0
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = reject;

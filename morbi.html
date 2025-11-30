@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Plant Simulation & SLD</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h2 {
+            margin: 0 0 5px 0;
+            color: #2c3e50;
+        }
+
+        p.subtitle {
+            margin: 0 0 20px 0;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* --- INPUT PANEL --- */
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .input-section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .input-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            color: #2196F3;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #34495e;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-row .input-group {
+            flex: 1;
+        }
+
+        .run-btn {
+            width: 100%;
+            padding: 12px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .run-btn:hover {
+            background: #1976D2;
+        }
+
+        /* --- VISUALIZATION AREA --- */
+        .viz-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sld-wrapper {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+
+        /* LOGIC BREAKDOWN BOX */
+        .logic-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 0.85rem;
+            width: 240px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            z-index: 20;
+        }
+
+        .logic-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .logic-row.total {
+            border-top: 1px solid #ccc;
+            padding-top: 5px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .logic-val {
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .time-control {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        input[type=range] {
+            flex-grow: 1;
+            cursor: pointer;
+        }
+
+        .clock-display {
+            font-family: monospace;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* --- RESULTS TABLE --- */
+        .results-wrapper {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            overflow-x: auto;
+            max-height: 400px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 8px 12px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+        }
+
+        td:first-child,
+        th:first-child {
+            text-align: left;
+        }
+
+        th {
+            background: #f8f9fa;
+            color: #555;
+            position: sticky;
+            top: 0;
+        }
+
+        .row-outage {
+            background-color: #ffebee;
+        }
+
+        .row-highlight {
+            background-color: #e3f2fd;
+            font-weight: bold;
+        }
+
+        /* --- SVG STYLES --- */
+        svg {
+            width: 100%;
+            height: auto;
+            max-height: 600px;
+        }
+
+        .line-base {
+            fill: none;
+            stroke-width: 3;
+            transition: stroke 0.3s;
+        }
+
+        .energized {
+            stroke: #2ecc71;
+        }
+
+        .deenergized {
+            stroke: #bdc3c7;
+        }
+
+        .batt-discharge {
+            stroke: #e67e22;
+            stroke-dasharray: 10, 5;
+            animation: flowUp 1s linear infinite;
+        }
+
+        .batt-charge {
+            stroke: #27ae60;
+            stroke-dasharray: 10, 5;
+            animation: flowDown 1s linear infinite;
+        }
+
+        .grid-import {
+            stroke: #e67e22;
+            stroke-dasharray: 10, 5;
+            animation: flowDown 1s linear infinite;
+        }
+
+        /* Orange Import */
+        .grid-export {
+            stroke: #2ecc71;
+            stroke-dasharray: 10, 5;
+            animation: flowUp 1s linear infinite;
+        }
+
+        @keyframes flowDown {
+            to {
+                stroke-dashoffset: -15;
+            }
+        }
+
+        @keyframes flowUp {
+            to {
+                stroke-dashoffset: 15;
+            }
+        }
+
+        .component-box {
+            fill: #fff;
+            stroke: #333;
+            stroke-width: 2;
+        }
+
+        .panel-area {
+            fill: rgba(0, 0, 0, 0.03);
+            stroke: #999;
+            stroke-width: 1;
+            stroke-dasharray: 5, 5;
+        }
+
+        .breaker-open {
+            fill: white;
+            stroke: #e74c3c;
+            stroke-width: 2;
+        }
+
+        .breaker-closed {
+            fill: #2ecc71;
+            stroke: #27ae60;
+            stroke-width: 2;
+        }
+
+        .status-text {
+            font-size: 12px;
+            font-weight: bold;
+            text-anchor: middle;
+        }
+
+        .label-text {
+            font-size: 11px;
+            fill: #666;
+            font-weight: bold;
+        }
+
+        .val-text {
+            font-size: 10px;
+            fill: #555;
+            text-anchor: middle;
+            font-family: monospace;
+        }
+
+        .action-text {
+            font-size: 11px;
+            font-weight: bold;
+            text-anchor: start;
+        }
+
+        .trans-circle {
+            fill: #fff;
+            stroke: #333;
+            stroke-width: 2;
+        }
+
+        /* Checkbox Style */
+        .chk-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #333;
+            cursor: pointer;
+        }
+
+        .chk-container input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div style="max-width: 1600px; margin: 0 auto;">
+        <h2>Solar Plant Simulation Dashboard</h2>
+        <p class="subtitle">1.3MW Hybrid + 1.2MW Existing | Full System Flow Analysis</p>
+    </div>
+
+    <div class="main-layout">
+
+        <!-- LEFT PANEL: INPUTS -->
+        <div class="panel">
+            <h3 style="margin-top:0;">Configuration</h3>
+
+            <div class="input-section">
+                <div class="section-title">Loads</div>
+                <div class="input-group">
+                    <label>Day Load (kW) [9AM - 6PM]</label>
+                    <input type="number" id="in_dayLoad" value="1100">
+                </div>
+                <div style="height:10px;"></div>
+                <div class="input-group">
+                    <label>Night Load (kW)</label>
+                    <input type="number" id="in_nightLoad" value="300">
+                </div>
+            </div>
+
+            <div class="input-section">
+                <div class="section-title">Environment & Battery</div>
+                <div class="input-group">
+                    <label>Battery Capacity (kWh)</label>
+                    <input type="number" id="in_battCap" value="5000">
+                </div>
+                <div style="height:10px;"></div>
+                <div class="input-group">
+                    <label>Battery % at 7:00 AM</label>
+                    <input type="number" id="in_startSoc" value="10" max="100">
+                </div>
+
+                <div style="height:15px;"></div>
+                <div class="input-group">
+                    <label>New Solar Priority</label>
+                    <select id="in_priority">
+                        <option value="load_first">Load First (Self-Consumption)</option>
+                        <option value="batt_first" selected>Battery First (Backup Priority)</option>
+                    </select>
+                </div>
+
+                <!-- DAY DISCHARGE TOGGLE -->
+                <div
+                    style="margin-top:15px; padding:10px; background:#fbe9e7; border-radius:6px; border:1px solid #ffab91;">
+                    <label class="chk-container">
+                        <input type="checkbox" id="in_dayDischarge">
+                        Enable Day Discharge (Arbitrage)
+                    </label>
+                    <div style="font-size:0.75rem; color:#555; margin-left:28px; margin-top:4px;">
+                        If unchecked, system imports from Grid during day deficits to preserve battery.
+                    </div>
+                </div>
+
+                <!-- ZERO EXPORT TOGGLE (NEW) -->
+                <div
+                    style="margin-top:10px; padding:10px; background:#e0f2f1; border-radius:6px; border:1px solid #80cbc4;">
+                    <label class="chk-container">
+                        <input type="checkbox" id="in_zeroExport">
+                        Zero Export Mode (New System)
+                    </label>
+                    <div style="font-size:0.75rem; color:#555; margin-left:28px; margin-top:4px;">
+                        If Checked: Excess New Solar is curtailed (dropped) instead of exported to Grid.
+                    </div>
+                </div>
+
+                <div style="height:15px;"></div>
+                <div class="input-group">
+                    <label>Cloud Cover (%)</label>
+                    <input type="range" id="in_cloud" min="0" max="100" value="0"
+                        oninput="document.getElementById('cloudVal').innerText = this.value + '%'">
+                    <span id="cloudVal" style="font-size:0.8rem; float:right;">0%</span>
+                </div>
+            </div>
+
+            <div class="input-section">
+                <div class="section-title">Outages (Grid Failure)</div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>Day Start (Hour)</label>
+                        <input type="number" id="in_dayOutageStart" value="13" min="0" max="23">
+                    </div>
+                    <div class="input-group">
+                        <label>Duration (Hrs)</label>
+                        <input type="number" id="in_dayOutageDur" value="2">
+                    </div>
+                </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>Night Start (Hour)</label>
+                        <input type="number" id="in_nightOutageStart" value="20" min="0" max="23">
+                    </div>
+                    <div class="input-group">
+                        <label>Duration (Hrs)</label>
+                        <input type="number" id="in_nightOutageDur" value="1">
+                    </div>
+                </div>
+            </div>
+
+            <button class="run-btn" onclick="runSimulation()">Run Simulation ⚡</button>
+        </div>
+
+        <!-- RIGHT PANEL: VISUALIZATION & RESULTS -->
+        <div class="viz-container">
+
+            <!-- SLD VISUALIZATION -->
+            <div class="sld-wrapper">
+
+                <div
+                    style="position:absolute; top:20px; left:20px; background:rgba(255,255,255,0.9); padding:5px 10px; border-radius:4px; border:1px solid #ddd; z-index:10;">
+                    <strong>Live Time:</strong> <span id="sim_time">07:00</span>
+                </div>
+
+                <!-- LOGIC BOX (Breakdown) -->
+                <div class="logic-box" id="logicPanel">
+                    <div style="font-weight:bold; margin-bottom:10px; color:#2196F3;">Power Flow Breakdown</div>
+                    <div class="logic-row"><span>Total Load:</span> <span class="logic-val" id="log_load">1100</span>
+                    </div>
+                    <div class="logic-row"><span>- Old Solar:</span> <span class="logic-val" id="log_old">-540</span>
+                    </div>
+                    <div class="logic-row"><span>- Used New Solar:</span> <span class="logic-val"
+                            id="log_used_new">-0</span></div>
+                    <div class="logic-row"><span>- Battery Disch:</span> <span class="logic-val"
+                            id="log_batt_dis">-0</span></div>
+                    <div class="logic-row" id="row_curtail" style="color:#e74c3c; display:none;"><span>-
+                            Curtailed:</span> <span class="logic-val" id="log_curtail">0</span></div>
+                    <div class="logic-row total"><span>= Net Grid:</span> <span class="logic-val"
+                            id="log_net_grid">560</span></div>
+                    <div style="font-size:0.75rem; margin-top:5px; color:#777;" id="log_note"></div>
+                </div>
+
+                <svg viewBox="0 0 1000 600">
+                    <defs>
+                        <marker id="arrowGreen" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L0,6 L6,3 z" fill="#2ecc71" />
+                        </marker>
+                        <marker id="arrowOrange" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L0,6 L6,3 z" fill="#e67e22" />
+                        </marker>
+                    </defs>
+
+                    <!-- AREAS -->
+                    <rect x="50" y="150" width="900" height="120" rx="5" class="panel-area" />
+                    <text x="60" y="165" class="label-text">HT PANEL (11 kV)</text>
+                    <rect x="700" y="450" width="250" height="130" rx="5" class="panel-area" />
+                    <text x="710" y="465" class="label-text">LT PANEL (415 V)</text>
+
+                    <!-- GRID -->
+                    <text x="500" y="30" class="status-text">GRID SUPPLY (11 kV)</text>
+                    <line id="s_grid_line" x1="500" y1="40" x2="500" y2="90" class="line-base energized" />
+                    <rect x="475" y="90" width="50" height="30" class="component-box" />
+                    <text x="500" y="110" class="status-text" style="font-size:10px;">METER</text>
+                    <line id="s_meter_psd" x1="500" y1="120" x2="500" y2="140" class="line-base energized" />
+                    <circle id="s_psd" cx="500" cy="140" r="10" class="breaker-closed" />
+                    <text x="530" y="145" class="val-text" style="text-anchor:start;">PSD</text>
+                    <line id="s_psd_bus" x1="500" y1="150" x2="500" y2="200" class="line-base energized" />
+
+                    <!-- BUSBAR -->
+                    <line id="s_bus" x1="100" y1="200" x2="900" y2="200" class="line-base energized"
+                        style="stroke-width:8; stroke:#e67e22;" />
+                    <text x="880" y="190" class="val-text">11kV BUS</text>
+
+                    <!-- LEFT: OLD SOLAR -->
+                    <line id="s_ex_tap" x1="200" y1="200" x2="200" y2="230" class="line-base energized" />
+                    <rect id="s_ex_vcb" x="180" y="230" width="40" height="30" class="component-box" />
+                    <line id="s_ex_mid" x1="200" y1="260" x2="200" y2="300" class="line-base energized" />
+                    <circle cx="200" cy="300" r="15" class="trans-circle" />
+                    <circle cx="200" cy="325" r="15" class="trans-circle" />
+                    <line id="s_ex_low" x1="200" y1="340" x2="200" y2="400" class="line-base energized" />
+                    <rect x="150" y="400" width="100" height="50" class="component-box" />
+                    <text x="200" y="420" class="status-text">OLD INV</text>
+                    <line id="s_ex_pv_line" x1="200" y1="450" x2="200" y2="500" class="line-base energized" />
+                    <g transform="translate(160,500)">
+                        <path d="M0,0 L80,0 L70,40 L10,40 Z" fill="#3498db" stroke="#2980b9" />
+                    </g>
+                    <text id="val_ex_solar" x="200" y="575" class="val-text">0 kW</text>
+
+                    <!-- CENTER: NEW HYBRID -->
+                    <line id="s_new_tap" x1="500" y1="200" x2="500" y2="230" class="line-base energized" />
+                    <rect id="s_new_vcb" x="480" y="230" width="40" height="30" class="component-box" />
+                    <line id="s_new_mid" x1="500" y1="260" x2="500" y2="300" class="line-base energized" />
+                    <circle cx="500" cy="300" r="15" class="trans-circle" />
+                    <circle cx="500" cy="325" r="15" class="trans-circle" />
+                    <line id="s_new_low" x1="500" y1="340" x2="500" y2="400" class="line-base energized" />
+                    <rect x="440" y="400" width="120" height="60" class="component-box" style="stroke-width:3;" />
+                    <text x="500" y="425" class="status-text">HYBRID INV</text>
+                    <line id="s_new_pv_line" x1="470" y1="460" x2="470" y2="500" class="line-base energized" />
+                    <g transform="translate(430,500)">
+                        <path d="M0,0 L80,0 L70,40 L10,40 Z" fill="#3498db" stroke="#2980b9" />
+                    </g>
+                    <text id="val_new_solar" x="470" y="575" class="val-text">0 kW</text>
+
+                    <!-- BATTERY -->
+                    <line id="s_batt_line" x1="530" y1="460" x2="530" y2="500" class="line-base energized" />
+                    <text id="batt_action_label" x="545" y="480" class="action-text" fill="#555">IDLE</text>
+                    <rect x="510" y="500" width="40" height="40" class="component-box" style="fill:#f1c40f;" />
+                    <path d="M525,510 L535,510 L535,505 L525,505 Z" fill="#333" />
+                    <text x="530" y="560" class="status-text">BESS</text>
+                    <text id="val_batt_soc" x="530" y="575" class="val-text">--%</text>
+
+                    <!-- RIGHT: LOADS -->
+                    <line id="s_load_tap" x1="800" y1="200" x2="800" y2="230" class="line-base energized" />
+                    <rect id="s_load_vcb" x="780" y="230" width="40" height="30" class="component-box" />
+                    <line id="s_load_mid" x1="800" y1="260" x2="800" y2="300" class="line-base energized" />
+                    <circle cx="800" cy="300" r="15" class="trans-circle" />
+                    <circle cx="800" cy="325" r="15" class="trans-circle" />
+                    <line id="s_load_low" x1="800" y1="340" x2="800" y2="470" class="line-base energized" />
+                    <rect x="720" y="470" width="210" height="80" class="component-box" style="fill:#ecf0f1;" />
+                    <text x="825" y="490" class="status-text">DISTRIBUTION (LT)</text>
+                    <line id="s_units_line" x1="825" y1="500" x2="825" y2="530" class="line-base energized" />
+                    <rect x="780" y="530" width="90" height="30" class="component-box" />
+                    <text x="825" y="550" class="status-text">FACTORY</text>
+                    <text id="val_load" x="825" y="575" class="val-text">300 kW</text>
+
+                </svg>
+
+                <!-- SLIDER -->
+                <div class="time-control">
+                    <span style="font-size:0.8rem; font-weight:bold; color:#7f8c8d;">07:00</span>
+                    <input type="range" id="timeSlider" min="7" max="30" step="1" value="7"
+                        oninput="updateVisuals(this.value)">
+                    <span style="font-size:0.8rem; font-weight:bold; color:#7f8c8d;">06:00 (+1)</span>
+                    <div class="clock-display" id="clockDisp">07:00</div>
+                </div>
+            </div>
+
+            <!-- RESULTS TABLE -->
+            <div class="results-wrapper">
+                <h3>Hour-by-Hour Report</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Hour</th>
+                            <th>Grid Status</th>
+                            <th>Load (kW)</th>
+                            <th>Solar Gen (Old/New)</th>
+                            <th>Net Grid (kW)</th>
+                            <th>Battery Flow</th>
+                            <th>Battery SOC</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resTableBody"></tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const OLD_SOLAR_CAP = 1200;
+        const NEW_SOLAR_CAP = 1300;
+        let simData = [];
+        let globalBattCap = 5000;
+
+        window.onload = function () { runSimulation(); };
+
+        function runSimulation() {
+            const dayLoad = parseInt(document.getElementById('in_dayLoad').value);
+            const nightLoad = parseInt(document.getElementById('in_nightLoad').value);
+
+            const dayOutageStart = parseInt(document.getElementById('in_dayOutageStart').value);
+            const dayOutageDur = parseFloat(document.getElementById('in_dayOutageDur').value);
+
+            const nightOutageStart = parseInt(document.getElementById('in_nightOutageStart').value);
+            const nightOutageDur = parseFloat(document.getElementById('in_nightOutageDur').value);
+
+            globalBattCap = parseInt(document.getElementById('in_battCap').value);
+            const startSoc = parseInt(document.getElementById('in_startSoc').value);
+            const cloudPct = parseInt(document.getElementById('in_cloud').value);
+
+            const allowDayDischarge = document.getElementById('in_dayDischarge').checked;
+            const zeroExport = document.getElementById('in_zeroExport').checked; // Zero Export Toggle
+            const priority = document.getElementById('in_priority').value;
+
+            simData = [];
+            let currentSoc = (startSoc / 100) * globalBattCap;
+
+            for (let i = 7; i <= 30; i++) {
+                let hour = i % 24;
+                let isDay = (hour >= 7 && hour < 18);
+
+                // Outage Logic
+                let gridOn = true;
+                if (dayOutageDur > 0) {
+                    let end = dayOutageStart + dayOutageDur;
+                    if (hour >= dayOutageStart && hour < end) gridOn = false;
+                }
+                if (nightOutageDur > 0) {
+                    let start = nightOutageStart;
+                    let end = nightOutageStart + nightOutageDur;
+                    if (hour >= start && hour < end) gridOn = false;
+                }
+
+                // Load
+                let currentLoad = (hour >= 9 && hour < 18) ? dayLoad : nightLoad;
+
+                // Solar
+                let solarFactor = 0;
+                if (isDay) {
+                    let distFromNoon = Math.abs(13 - hour);
+                    if (distFromNoon < 6) solarFactor = Math.cos((distFromNoon / 6) * (Math.PI / 2));
+                }
+                solarFactor = solarFactor * (1 - (cloudPct / 100));
+
+                let oldSolarGen = gridOn ? (OLD_SOLAR_CAP * solarFactor) : 0;
+                let newSolarGen = NEW_SOLAR_CAP * solarFactor;
+
+                // Energy Flow Logic
+                let netGrid = 0;
+                let battFlow = 0;
+                let loadRemaining = currentLoad;
+                let note = "";
+
+                let log_usedOld = 0;
+                let log_usedNew = 0;
+                let log_battDis = 0;
+                let log_curtail = 0;
+                let exportNew = 0; // Capture explicit new export
+
+                if (gridOn) {
+                    // Initialize export buckets
+                    let exportOld = 0;
+
+                    // --- PRIORITY LOGIC ---
+                    if (priority === 'batt_first') {
+                        // A. Charge Battery First
+                        let toBatt = 0;
+                        let newSolarAvailable = newSolarGen;
+                        if (newSolarGen > 0) {
+                            let roomInBatt = globalBattCap - currentSoc;
+                            toBatt = Math.min(newSolarGen, roomInBatt, 2500);
+                            battFlow = toBatt;
+                            currentSoc += toBatt;
+                            newSolarAvailable = newSolarGen - toBatt;
+                            if (toBatt > 0) note = "New Solar Priority: Charge Battery";
+                        }
+
+                        // B. Old Solar -> Load
+                        let usedOld = Math.min(loadRemaining, oldSolarGen);
+                        loadRemaining -= usedOld;
+                        log_usedOld = usedOld;
+                        exportOld = oldSolarGen - usedOld;
+
+                        // C. New Solar -> Load? (NO! If Batt First, we Curtail or Export only)
+                        // This prevents New Solar from covering the deficit.
+                        // User requirement: "Import has to be there for remaining deficit"
+
+                        // Remaining New Solar is treated as Export (or Curtailment if selected)
+                        exportNew = newSolarAvailable;
+                        log_usedNew = 0; // New Solar does NOT feed load in this mode
+
+                        // D. Deficit -> Discharge or Import
+                        if (loadRemaining > 0) {
+                            let availableBatt = currentSoc - (0.1 * globalBattCap);
+                            let discharge = (isDay && allowDayDischarge) || (!isDay);
+
+                            // We can't discharge if we just charged in step A (battFlow > 0)
+                            if (discharge && availableBatt > 0 && battFlow <= 0) {
+                                let fromBatt = Math.min(loadRemaining, availableBatt, 2500);
+                                battFlow = -fromBatt;
+                                currentSoc -= fromBatt;
+                                loadRemaining -= fromBatt;
+                                log_battDis = fromBatt;
+                            }
+                            netGrid = loadRemaining - exportOld;
+                            if (netGrid < 0) netGrid = 0;
+
+                        } else {
+                            // If Old Solar covered everything, subtract exports
+                            netGrid = -exportOld;
+                        }
+
+                        // Apply Zero Export Logic for New Solar part
+                        if (zeroExport && exportNew > 0) {
+                            log_curtail = exportNew;
+                            exportNew = 0;
+                            note = "Battery Full: New Solar Curtailed";
+                        } else if (exportNew > 0) {
+                            netGrid -= exportNew; // Add to export
+                        }
+
+                    } else {
+                        // Load First (Standard)
+                        // A. Old Solar -> Load
+                        let usedOld = Math.min(loadRemaining, oldSolarGen);
+                        loadRemaining -= usedOld;
+                        log_usedOld = usedOld;
+                        exportOld = oldSolarGen - usedOld;
+
+                        // B. New Solar -> Remaining Load
+                        let usedNew = Math.min(loadRemaining, newSolarGen);
+                        loadRemaining -= usedNew;
+                        log_usedNew = usedNew;
+                        let surplusNew = newSolarGen - usedNew;
+
+                        // C. Surplus -> Battery
+                        if (surplusNew > 0) {
+                            let roomInBatt = globalBattCap - currentSoc;
+                            let toBatt = Math.min(surplusNew, roomInBatt, 2500);
+                            battFlow = toBatt;
+                            currentSoc += toBatt;
+
+                            exportNew = surplusNew - toBatt;
+
+                            // Apply Zero Export Logic
+                            if (zeroExport && exportNew > 0) {
+                                log_curtail = exportNew;
+                                exportNew = 0;
+                                note = "Zero Export: New Solar Curtailed";
+                            } else if (exportNew > 0) {
+                                note = "Surplus -> Export";
+                            } else {
+                                note = "Surplus -> Battery";
+                            }
+
+                            netGrid = -(exportOld + exportNew);
+                        } else {
+                            // Deficit
+                            if (loadRemaining > 0) {
+                                let availableBatt = currentSoc - (0.1 * globalBattCap);
+                                let discharge = (isDay && allowDayDischarge) || (!isDay);
+
+                                if (discharge && availableBatt > 0) {
+                                    let fromBatt = Math.min(loadRemaining, availableBatt, 2500);
+                                    battFlow = -fromBatt;
+                                    currentSoc -= fromBatt;
+                                    loadRemaining -= fromBatt;
+                                    log_battDis = fromBatt;
+                                }
+                                netGrid = loadRemaining - exportOld;
+                                if (netGrid < 0) netGrid = 0;
+                            } else {
+                                netGrid = -exportOld;
+                            }
+                        }
+                    }
+
+                } else {
+                    // ISLAND MODE
+                    note = "ISLAND MODE";
+                    let usedNew = Math.min(currentLoad, newSolarGen);
+                    log_usedNew = usedNew;
+                    let remLoad = currentLoad - usedNew;
+                    let surplusNew = newSolarGen - usedNew;
+
+                    if (surplusNew > 0) {
+                        let roomInBatt = globalBattCap - currentSoc;
+                        let toBatt = Math.min(surplusNew, roomInBatt);
+                        battFlow = toBatt;
+                        currentSoc += toBatt;
+                        log_curtail = surplusNew - toBatt;
+                    } else if (remLoad > 0) {
+                        let availableBatt = currentSoc;
+                        if (availableBatt >= remLoad) {
+                            battFlow = -remLoad;
+                            currentSoc -= remLoad;
+                            log_battDis = remLoad;
+                        } else {
+                            battFlow = -availableBatt;
+                            currentSoc = 0;
+                            log_battDis = availableBatt;
+                        }
+                    }
+                }
+
+                simData.push({
+                    i: i,
+                    hourFormatted: formatTime(hour),
+                    gridOn: gridOn,
+                    load: currentLoad,
+                    oldSolar: oldSolarGen.toFixed(0),
+                    newSolar: newSolarGen.toFixed(0),
+                    netGrid: netGrid.toFixed(0),
+                    battFlow: battFlow.toFixed(0),
+                    socPct: ((currentSoc / globalBattCap) * 100).toFixed(1),
+                    socVal: currentSoc.toFixed(0),
+                    l_load: currentLoad,
+                    l_old: log_usedOld,
+                    l_new: log_usedNew,
+                    l_batt: log_battDis,
+                    l_net: netGrid.toFixed(0),
+                    l_curtail: log_curtail.toFixed(0),
+                    l_export_new: exportNew, // Save actual new export
+                    l_note: note
+                });
+            }
+
+            buildTable();
+            document.getElementById('timeSlider').value = 7;
+            updateVisuals(7);
+        }
+
+        function buildTable() {
+            const tbody = document.getElementById('resTableBody');
+            tbody.innerHTML = '';
+            simData.forEach(row => {
+                let tr = document.createElement('tr');
+                if (!row.gridOn) tr.className = 'row-outage';
+                let gridStr = row.gridOn ? '<span style="color:#27ae60">ON</span>' : '<span style="color:#c0392b; font-weight:bold;">OUTAGE</span>';
+                let netStr = parseFloat(row.netGrid) < 0
+                    ? `<span style="color:#27ae60">${Math.abs(row.netGrid)} (Exp)</span>`
+                    : `<span style="color:#e67e22">${row.netGrid} (Imp)</span>`;
+                let flowDir = row.battFlow > 0 ? '(Chg)' : (row.battFlow < 0 ? '(Dis)' : '');
+
+                let solarDisplay = `${row.oldSolar} / ${row.newSolar}`;
+                if (row.l_curtail > 0) solarDisplay += ` <span style='color:#e74c3c; font-size:0.8em;'>(Curtail: ${row.l_curtail})</span>`;
+
+                tr.innerHTML = `<td><b>${row.hourFormatted}</b></td><td>${gridStr}</td><td>${row.load}</td>
+                    <td>${solarDisplay}</td><td>${netStr}</td><td>${row.battFlow} ${flowDir}</td>
+                    <td><small>${Number(row.socVal).toLocaleString()} / ${Number(globalBattCap).toLocaleString()} kWh (${row.socPct}%)</small></td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateVisuals(sliderVal) {
+            let data = simData.find(d => d.i == sliderVal);
+            if (!data) return;
+
+            document.getElementById('clockDisp').innerText = data.hourFormatted;
+            document.getElementById('sim_time').innerText = data.hourFormatted;
+
+            // Logic Box Update
+            document.getElementById('log_load').innerText = data.l_load;
+            document.getElementById('log_old').innerText = "-" + Math.round(data.l_old);
+            document.getElementById('log_used_new').innerText = "-" + Math.round(data.l_new);
+            document.getElementById('log_batt_dis').innerText = "-" + Math.round(data.l_batt);
+            document.getElementById('log_net_grid').innerText = data.l_net;
+
+            let cVal = Math.round(data.l_curtail);
+            document.getElementById('log_curtail').innerText = "-" + cVal;
+            document.getElementById('row_curtail').style.display = cVal > 0 ? 'flex' : 'none';
+
+            document.getElementById('log_note').innerText = data.l_note;
+
+            // Visuals
+            const setClass = (id, cls) => { let el = document.getElementById(id); if (el) el.setAttribute('class', cls); };
+            const setBreaker = (id, closed) => { setClass(id, closed ? 'breaker-closed' : 'breaker-open'); };
+
+            let netGrid = parseFloat(data.netGrid);
+            let gridFlowClass = !data.gridOn ? 'line-base deenergized'
+                : (netGrid > 0 ? 'line-base grid-import' : (netGrid < 0 ? 'line-base grid-export' : 'line-base energized'));
+
+            setClass('s_grid_line', gridFlowClass);
+            setClass('s_meter_psd', gridFlowClass);
+            setClass('s_psd_bus', gridFlowClass);
+            setBreaker('s_psd', data.gridOn);
+
+            let oldGen = parseFloat(data.oldSolar);
+            let oldClass = (oldGen > 0 && data.gridOn) ? 'line-base grid-export' : (data.gridOn ? 'line-base energized' : 'line-base deenergized');
+            setClass('s_ex_low', oldClass);
+            setClass('s_ex_mid', oldClass);
+            setClass('s_ex_tap', oldClass);
+            setBreaker('s_ex_vcb', data.gridOn);
+            document.getElementById('val_ex_solar').textContent = data.oldSolar + ' kW';
+
+            let newGen = parseFloat(data.newSolar);
+            let battFlow = parseFloat(data.battFlow);
+            let battLine = document.getElementById('s_batt_line');
+            let battLabel = document.getElementById('batt_action_label');
+
+            if (battFlow > 5) {
+                battLine.setAttribute('class', 'line-base batt-charge');
+                battLine.setAttribute('marker-end', 'url(#arrowGreen)');
+                battLabel.textContent = "CHARGING";
+                battLabel.setAttribute("fill", "#27ae60");
+            } else if (battFlow < -5) {
+                battLine.setAttribute('class', 'line-base batt-discharge');
+                battLine.setAttribute('marker-end', 'url(#arrowOrange)');
+                battLabel.textContent = "DISCHARGING";
+                battLabel.setAttribute("fill", "#e67e22");
+            } else {
+                battLine.setAttribute('class', 'line-base energized');
+                battLine.removeAttribute('marker-end');
+                battLabel.textContent = "IDLE";
+                battLabel.setAttribute("fill", "#555");
+            }
+
+            // Hybrid Line Logic
+            let hybridClass = 'line-base energized';
+
+            // Determine active power flow AC-side
+            let acFlow = parseFloat(data.l_new) + parseFloat(data.l_export_new) + Math.abs(parseFloat(data.l_batt));
+            let isHybridActive = acFlow > 1;
+            let vcbClosed = !data.gridOn || isHybridActive;
+
+            setBreaker('s_new_vcb', vcbClosed);
+
+            if (vcbClosed) {
+                if (!data.gridOn) {
+                    hybridClass = 'line-base energized'; // Island
+                } else {
+                    if (data.l_export_new > 0) hybridClass = 'line-base grid-export';
+                    else if (data.l_new > 0) hybridClass = 'line-base energized';
+                    else if (data.l_batt < 0) hybridClass = 'line-base grid-export';
+                    else hybridClass = 'line-base energized';
+                }
+            } else {
+                hybridClass = 'line-base deenergized'; // Cutoff
+            }
+
+            setClass('s_new_low', hybridClass);
+            setClass('s_new_mid', hybridClass);
+            setClass('s_new_tap', hybridClass);
+
+            document.getElementById('val_new_solar').textContent = data.newSolar + ' kW';
+            document.getElementById('val_batt_soc').textContent = Math.round(data.socPct) + '%';
+
+            // Load lines
+            let pwrAvail = data.gridOn || newGen > 0 || parseFloat(data.socPct) > 0;
+            let loadClass = pwrAvail ? 'line-base grid-import' : 'line-base deenergized';
+            setClass('s_load_tap', loadClass);
+            setClass('s_load_mid', loadClass);
+            setClass('s_load_low', loadClass);
+            document.getElementById('val_load').textContent = data.load + ' kW';
+
+            // Bus
+            setClass('s_bus', pwrAvail ? 'line-base energized' : 'line-base deenergized');
+
+            let rows = document.querySelectorAll('tbody tr');
+            rows.forEach(r => r.classList.remove('row-highlight'));
+            if (rows[sliderVal - 7]) rows[sliderVal - 7].classList.add('row-highlight');
+        }
+
+        function formatTime(h) {
+            let ampm = h >= 12 ? 'PM' : 'AM';
+            let hour = h % 12;
+            if (hour === 0) hour = 12;
+            return `${hour}:00 ${ampm}`;
+        }
+    </script>
+</body>
+
+</html>

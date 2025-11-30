@@ -14,6 +14,7 @@ import WeatherPanel from "./components/WeatherPanel";
 import SimulationControls from "./components/SimulationControls";
 import LoginPage from "./pages/LoginPage";
 import AuthCallback from "./pages/AuthCallback";
+import AdminPage from "./pages/AdminPage";
 import "./styles/index.css";
 
 function SolarApp() {
@@ -126,6 +127,10 @@ function App() {
         <Route
           path="/"
           element={isAuthenticated ? <SolarApp /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/admin"
+          element={isAuthenticated ? <AdminPage /> : <Navigate to="/login" />}
         />
       </Routes>
     </Router>
