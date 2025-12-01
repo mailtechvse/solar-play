@@ -86,6 +86,10 @@ export function renderCanvas(canvas, ctx, state) {
   // Save context for transformations
   ctx.save();
 
+  // Handle High DPI
+  const dpr = window.devicePixelRatio || 1;
+  ctx.scale(dpr, dpr);
+
   // Apply view transformations (pan and zoom)
   ctx.translate(offsetX, offsetY);
   ctx.scale(scale, scale);
@@ -102,7 +106,7 @@ export function renderCanvas(canvas, ctx, state) {
 
   // Draw wires first (below objects for proper layering)
   wires.forEach((wire) => {
-    drawWire(ctx, wire, objects, cableMode);
+    drawWire(ctx, wire, objects, cableMode, state);
   });
 
   // Sort objects by h_z (height) for proper depth rendering
@@ -161,7 +165,7 @@ export function renderCanvas(canvas, ctx, state) {
     // 2. Draw Objects for this group
     group.forEach(obj => {
       const isSelected = obj.id === selectedObjectId || (additionalSelectedIds || []).includes(obj.id);
-      drawObject(ctx, obj, isSelected);
+      drawObject(ctx, obj, isSelected, scale, offsetX, offsetY);
     });
   });
 
@@ -288,13 +292,17 @@ function drawResizeHandles(ctx, obj) {
  * Draw grid with 1m spacing
  */
 function drawGrid(ctx, canvas, scale, offsetX, offsetY) {
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.width / dpr;
+  const height = canvas.height / dpr;
+
   const gridSize = 1; // 1 meter
   const majorGridSize = 5; // Major grid every 5 meters
 
   const startX = Math.floor(-offsetX / scale / gridSize) * gridSize;
   const startY = Math.floor(-offsetY / scale / gridSize) * gridSize;
-  const endX = startX + canvas.width / scale / gridSize + 2;
-  const endY = startY + canvas.height / scale / gridSize + 2;
+  const endX = startX + width / scale / gridSize + 2;
+  const endY = startY + height / scale / gridSize + 2;
 
   // Draw minor grid lines
   ctx.strokeStyle = currentTheme.grid;
@@ -348,7 +356,7 @@ const textureCache = new Map();
 /**
  * Draw individual object with proper styling based on type
  */
-function drawObject(ctx, obj, isSelected) {
+function drawObject(ctx, obj, isSelected, scale = 1, offsetX = 0, offsetY = 0) {
   ctx.save();
 
   // Apply rotation if specified (only for rectangles for now)
@@ -360,6 +368,25 @@ function drawObject(ctx, obj, isSelected) {
 
   // Determine color based on type
   let fillColor = obj.color || "#1e3a8a";
+
+  // Visual feedback for De-energized state (Power Outage / Disconnected)
+  const ELECTRICAL_TYPES = [
+    'grid', 'panel', 'battery', 'load', 'inverter', 'meter', 'net_meter', 'gross_meter',
+    'vcb', 'acb', 'lt_panel', 'ht_panel', 'transformer', 'acdb', 'bess', 'pss'
+  ];
+
+  if (ELECTRICAL_TYPES.includes(obj.type)) {
+    // If explicitly de-energized (and not undefined, which implies not processed yet)
+    if (obj.isEnergized === false) {
+      if (obj.type === 'vcb' || obj.type === 'acb') {
+        // VCB/ACB should turn RED to indicate failure/loss of power/trip condition clearly
+        // Or should it be Grey? User asked: "In case of outage, the VCB should switch over to red"
+        fillColor = "#ef4444"; // Red
+      } else {
+        fillColor = "#475569"; // Slate 600 (Grey) for others
+      }
+    }
+  }
 
   const points = obj.points || obj.vertices;
 
@@ -398,6 +425,14 @@ function drawObject(ctx, obj, isSelected) {
     // Draw border
     ctx.strokeStyle = isSelected ? "#3b82f6" : adjustColor(fillColor, -40);
     ctx.lineWidth = isSelected ? 0.08 : 0.02;
+
+    // Visual feedback for Tripped/OFF state
+    if (obj.isOn === false) {
+      ctx.strokeStyle = "#ef4444"; // Red
+      ctx.lineWidth = 0.1;
+    }
+
+    ctx.stroke();
     ctx.stroke();
 
     // Add selection highlight
@@ -417,16 +452,30 @@ function drawObject(ctx, obj, isSelected) {
     ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
 
     // Add selection highlight
+    // Add selection highlight
     if (isSelected) {
       ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
       ctx.lineWidth = 0.15;
       ctx.strokeRect(obj.x - 0.1, obj.y - 0.1, obj.w + 0.2, obj.h + 0.2);
     }
+
+    // Visual feedback for Power Status (ON/OFF)
+    if (['vcb', 'acb', 'lt_panel', 'ht_panel', 'acdb', 'grid'].includes(obj.type)) {
+      const statusColor = obj.isOn !== false ? "#22c55e" : "#ef4444"; // Green or Red
+      ctx.beginPath();
+      ctx.arc(obj.x + obj.w - 0.3, obj.y + 0.3, 0.15, 0, 2 * Math.PI);
+      ctx.fillStyle = statusColor;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 0.02;
+      ctx.stroke();
+    }
   }
 
   // Draw type-specific icons/content (only for rects or center of poly)
   if (obj.type !== "polygon") {
-    drawObjectContent(ctx, obj);
+    // Draw content
+    drawObjectContent(ctx, obj, scale, offsetX, offsetY);
   }
 
   ctx.restore();
@@ -435,41 +484,193 @@ function drawObject(ctx, obj, isSelected) {
 /**
  * Draw object-specific content (labels, icons, specs)
  */
-function drawObjectContent(ctx, obj) {
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+/**
+ * Draw object-specific content (labels, icons, specs)
+ */
+function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0) {
+  // Constants for screen-space sizes (in pixels)
+  const SCREEN_FONT_SIZE = 14;
+  const SCREEN_PADDING_X = 8;
+  const SCREEN_PADDING_Y = 4;
+  const SCREEN_RADIUS = 4;
 
+  // Calculate screen coordinates for the object center
+  // We use these to draw text in screen space for maximum crispness
   const centerX = obj.x + obj.w / 2;
   const centerY = obj.y + obj.h / 2;
 
-  // Draw label if available
-  if (obj.label) {
-    ctx.font = "bold 0.15px Arial";
-    ctx.fillText(obj.label, centerX, centerY - 0.2);
+  // Prepare lines of text
+  const lines = [];
+  if (obj.label) lines.push({ text: obj.label, size: SCREEN_FONT_SIZE, weight: "600" });
+
+  // Specs text
+  let specText = "";
+  let specColor = "#ffffff"; // Default white
+  let isDigital = false;
+  let showBatteryBar = false;
+
+  if (obj.type === "panel" && obj.watts) specText = `${obj.watts}W`;
+  else if (obj.type === "inverter" && obj.capKw) specText = `${obj.capKw}kW`;
+  else if (obj.type === "battery" || obj.type === "bess") {
+    const cap = obj.capKwh || (obj.specifications?.battery_capacity || 0);
+    specText = `${cap}kWh`;
+    showBatteryBar = true;
+  }
+  else if (obj.type === "load" && obj.units) specText = `${obj.units}U`;
+  else if (obj.type === "grid") {
+    if (obj.isOutage) {
+      specText = "OUTAGE";
+      specColor = "#ef4444";
+    }
+  }
+  else if ((obj.type === "vcb" || obj.type === "acb")) {
+    if (obj.isOn === false) {
+      specText = "TRIPPED";
+      specColor = "#ef4444";
+    } else if (obj.isEnergized === false) {
+      // If it's ON but de-energized (e.g. grid outage), show status
+      specText = "NO POWER";
+      specColor = "#f59e0b"; // Amber
+    }
+  }
+  else if (obj.type === "net_meter" || obj.type === "gross_meter") {
+    specText = `${(obj.reading || 0).toFixed(2)} kWh`;
+    specColor = "#10b981"; // Emerald
+    isDigital = true;
   }
 
-  // Draw type-specific specs
-  if (obj.type === "panel" && obj.watts) {
-    ctx.font = "0.12px Arial";
-    ctx.fillText(`${obj.watts}W`, centerX, centerY + 0.1);
-  } else if (obj.type === "inverter" && obj.capKw) {
-    ctx.font = "0.12px Arial";
-    ctx.fillText(`${obj.capKw}kW`, centerX, centerY + 0.1);
-  } else if (obj.type === "battery" && obj.capKwh) {
-    ctx.font = "0.12px Arial";
-    ctx.fillText(`${obj.capKwh}kWh`, centerX, centerY + 0.1);
-  } else if (obj.type === "load" && obj.units) {
-    ctx.font = "0.12px Arial";
-    ctx.fillText(`${obj.units}U`, centerX, centerY + 0.1);
+  // Calculate dimensions
+  let totalHeight = 0;
+  let maxWidth = 0;
+
+  // Measure Label
+  if (lines.length > 0) {
+    ctx.font = `${lines[0].weight} ${lines[0].size}px "Inter", system-ui, -apple-system, sans-serif`;
+    const m = ctx.measureText(lines[0].text);
+    maxWidth = Math.max(maxWidth, m.width);
+    totalHeight += lines[0].size * 1.2;
   }
+
+  // Measure Spec Text
+  if (specText) {
+    const size = SCREEN_FONT_SIZE * 0.85;
+    const font = isDigital
+      ? `700 ${size}px "Courier New", monospace`
+      : `500 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+    ctx.font = font;
+    const m = ctx.measureText(specText);
+    maxWidth = Math.max(maxWidth, m.width);
+    totalHeight += size * 1.2;
+  }
+
+  // Measure Battery Bar
+  let barHeight = 0;
+  let barWidth = 0;
+  if (showBatteryBar) {
+    barWidth = (obj.w * scale) * 0.8; // 80% of object width (in screen pixels)
+    barHeight = SCREEN_FONT_SIZE * 0.6;
+    maxWidth = Math.max(maxWidth, barWidth);
+    totalHeight += barHeight + SCREEN_PADDING_Y;
+  }
+
+  if (lines.length === 0 && !specText && !showBatteryBar) return;
+
+  // Draw background pill
+  const bgWidth = maxWidth + (SCREEN_PADDING_X * 2);
+  const bgHeight = totalHeight + (SCREEN_PADDING_Y * 2);
+
+  // Switch to Screen Space
+  ctx.save();
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Reset to DPR-scaled screen space
+
+  // Calculate screen position
+  const screenX = (centerX * scale) + offsetX;
+  const screenY = (centerY * scale) + offsetY;
+
+  const bgX = screenX - bgWidth / 2;
+  const bgY = screenY - bgHeight / 2;
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.85)"; // Darker slate background
+  ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 3;
+
+  // Rounded Rect
+  ctx.beginPath();
+  ctx.roundRect(bgX, bgY, bgWidth, bgHeight, SCREEN_RADIUS);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.shadowColor = "transparent";
+
+  // Draw Content
+  let currentY = bgY + SCREEN_PADDING_Y;
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+
+  // 1. Label
+  if (lines.length > 0) {
+    const line = lines[0];
+    ctx.font = `${line.weight} ${line.size}px "Inter", system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(line.text, screenX, currentY);
+    currentY += line.size * 1.2;
+  }
+
+  // 2. Spec Text (Meter Reading / Capacity / Status)
+  if (specText) {
+    const size = SCREEN_FONT_SIZE * 0.85;
+    ctx.font = isDigital
+      ? `700 ${size}px "Courier New", monospace`
+      : `500 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = specColor;
+    ctx.fillText(specText, screenX, currentY);
+    currentY += size * 1.2;
+  }
+
+  // 3. Battery Bar
+  if (showBatteryBar) {
+    const soc = obj.soc !== undefined ? obj.soc : 0;
+    const barY = currentY + (SCREEN_PADDING_Y / 2);
+
+    // Background track
+    ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.beginPath();
+    ctx.roundRect(screenX - barWidth / 2, barY, barWidth, barHeight, barHeight / 2);
+    ctx.fill();
+
+    // Fill
+    let barColor = "#22c55e"; // Green
+    if (soc < 20) barColor = "#ef4444"; // Red
+    else if (soc < 50) barColor = "#eab308"; // Yellow
+
+    ctx.fillStyle = barColor;
+    ctx.beginPath();
+    const fillWidth = Math.max(0, (soc / 100) * barWidth);
+    ctx.roundRect(screenX - barWidth / 2, barY, fillWidth, barHeight, barHeight / 2);
+    ctx.fill();
+
+    // Text %
+    ctx.font = `600 ${barHeight * 0.8}px "Inter", sans-serif`;
+    ctx.fillStyle = "#ffffff";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${soc.toFixed(0)}%`, screenX, barY + barHeight / 2);
+  }
+
+  ctx.restore();
 }
 
 /**
  * Draw wire connections between objects
  * Supports both straight and orthogonal routing
  */
-function drawWire(ctx, wire, objects, cableMode = "straight") {
+function drawWire(ctx, wire, objects, cableMode = "straight", state = {}) {
   const fromObj = objects.find((o) => o.id === wire.from);
   const toObj = objects.find((o) => o.id === wire.to);
 
@@ -487,10 +688,29 @@ function drawWire(ctx, wire, objects, cableMode = "straight") {
     earth: currentTheme.earth,
   };
 
-  ctx.strokeStyle = wireColors[wire.type] || currentTheme.wire_dc;
+  let strokeColor = wireColors[wire.type] || currentTheme.wire_dc;
+
+  // Visual feedback for De-energized wires
+  const isDeEnergized = fromObj.isEnergized === false || toObj.isEnergized === false;
+  if (isDeEnergized) {
+    strokeColor = "#475569"; // Slate 600
+  }
+
+  ctx.save(); // Save context for line styles
+
+  ctx.strokeStyle = strokeColor;
   ctx.lineWidth = 0.08;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+
+  // Animation Logic
+  const flowOffset = state.flowOffset || 0;
+  if (flowOffset && !isDeEnergized) {
+    ctx.setLineDash([0.2, 0.1]);
+    ctx.lineDashOffset = -flowOffset;
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.9)"; // Green for active flow
+    ctx.lineWidth = 0.15;
+  }
 
   ctx.beginPath();
   ctx.moveTo(fromX, fromY);
@@ -504,6 +724,25 @@ function drawWire(ctx, wire, objects, cableMode = "straight") {
 
   ctx.lineTo(toX, toY);
   ctx.stroke();
+
+  ctx.restore(); // Restore context (clears dash, resets color/width)
+
+  // Draw Highlight if Selected
+  if (state.selectedWireId === wire.id) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(59, 130, 246, 0.5)"; // Blue highlight
+    ctx.lineWidth = 0.2;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    if (cableMode === "ortho" && wire.path && wire.path.length > 0) {
+      wire.path.forEach((point) => {
+        ctx.lineTo(point.x, point.y);
+      });
+    }
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Draw small circles at connection points
   ctx.fillStyle = wireColors[wire.type] || currentTheme.wire_dc;
@@ -806,9 +1045,12 @@ function drawSunPath(ctx, shadowVector, canvas, scale, offsetX, offsetY) {
   ctx.save();
 
   // Fixed screen space position (bottom left corner)
+  const dpr = window.devicePixelRatio || 1;
+  const height = canvas.height / dpr;
+
   const padding = 20;
   const cx = padding + 60;
-  const cy = canvas.height - padding - 20;
+  const cy = height - padding - 20;
   const r = 40;
 
   // Draw sun path arc (semi-circle from 6 AM to 6 PM)
@@ -838,7 +1080,7 @@ function drawSunPath(ctx, shadowVector, canvas, scale, offsetX, offsetY) {
 
   // Draw time labels
   ctx.fillStyle = "#fbbf24";
-  ctx.font = "9px monospace";
+  ctx.font = "bold 11px 'Inter', system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("6am", cx - r - 5, cy + 12);
   ctx.fillText("6pm", cx + r + 5, cy + 12);
@@ -853,8 +1095,12 @@ function drawSunPath(ctx, shadowVector, canvas, scale, offsetX, offsetY) {
 function drawCompass(canvas, ctx, orientation = 0) {
   ctx.save();
 
-  const x = canvas.width - 80;
-  const y = canvas.height - 80;
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.width / dpr;
+  const height = canvas.height / dpr;
+
+  const x = width - 80;
+  const y = height - 80;
   const radius = 30;
 
   ctx.translate(x, y);
@@ -869,7 +1115,7 @@ function drawCompass(canvas, ctx, orientation = 0) {
 
   // Draw cardinal directions
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 12px Arial";
+  ctx.font = "bold 12px 'Inter', system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -900,12 +1146,12 @@ function drawMeasurement(ctx, start, end) {
   // Draw line
   ctx.strokeStyle = "rgba(59, 130, 246, 0.8)";
   ctx.lineWidth = 0.1;
-  ctx.lineDash = [0.2, 0.1];
+  ctx.setLineDash([0.2, 0.1]);
   ctx.beginPath();
   ctx.moveTo(start.x, start.y);
   ctx.lineTo(end.x, end.y);
   ctx.stroke();
-  ctx.lineDash = [];
+  ctx.setLineDash([]);
 
   // Draw points
   ctx.fillStyle = "#3b82f6";
@@ -921,7 +1167,7 @@ function drawMeasurement(ctx, start, end) {
     Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
   );
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 0.15px Arial";
+  ctx.font = "bold 0.15px 'Inter', system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   const midX = (start.x + end.x) / 2;
@@ -930,6 +1176,7 @@ function drawMeasurement(ctx, start, end) {
 
   ctx.restore();
 }
+
 
 /**
  * Draw map overlay from imported satellite/map image
@@ -1053,7 +1300,7 @@ function drawInProgressDrawing(ctx, mode, points, preview) {
 
     // Draw dimensions
     ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
-    ctx.font = "bold 0.3px Arial";
+    ctx.font = "bold 0.3px 'Inter', system-ui, sans-serif";
     ctx.fillText(`${width.toFixed(1)}m x ${height.toFixed(1)}m`, minX + 0.2, minY - 0.1);
   } else if (mode === "polygon" || mode === "freehand") {
     // Draw path points
@@ -1079,7 +1326,7 @@ function drawInProgressDrawing(ctx, mode, points, preview) {
       // Draw point number
       if (mode === "polygon") {
         ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
-        ctx.font = "bold 0.2px Arial";
+        ctx.font = "bold 0.2px 'Inter', system-ui, sans-serif";
         ctx.fillText(String(i + 1), point.x + 0.2, point.y + 0.2);
       }
     }
@@ -1126,18 +1373,22 @@ function drawRulers(canvas, ctx, scale, offsetX, offsetY) {
   ctx.save();
 
   // Ruler styling - matching solar-board.html
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.width / dpr;
+  const height = canvas.height / dpr;
+
   ctx.fillStyle = "#374151"; // Dark gray background for rulers
-  ctx.fillRect(0, 0, canvas.width, 20); // Top ruler
-  ctx.fillRect(0, 0, 20, canvas.height); // Left ruler
+  ctx.fillRect(0, 0, width, 20); // Top ruler
+  ctx.fillRect(0, 0, 20, height); // Left ruler
 
   ctx.strokeStyle = "#6b7280"; // Grid lines
   ctx.fillStyle = "#9ca3af"; // Text color
-  ctx.font = "10px monospace";
+  ctx.font = "10px 'Inter', system-ui, sans-serif";
   ctx.textAlign = "center";
 
   // Draw top ruler ticks and labels
   const startX = Math.floor(-offsetX / scale);
-  const endX = Math.ceil((canvas.width - offsetX) / scale);
+  const endX = Math.ceil((width - offsetX) / scale);
 
   ctx.beginPath();
   for (let i = startX; i <= endX; i++) {
@@ -1157,7 +1408,7 @@ function drawRulers(canvas, ctx, scale, offsetX, offsetY) {
 
   // Draw left ruler ticks and labels
   const startY = Math.floor(-offsetY / scale);
-  const endY = Math.ceil((canvas.height - offsetY) / scale);
+  const endY = Math.ceil((height - offsetY) / scale);
 
   ctx.beginPath();
   ctx.textAlign = "left";
@@ -1198,8 +1449,12 @@ function drawSunDirection(ctx, shadowVector, canvas, scale, offsetX, offsetY) {
   ctx.save();
 
   // Calculate center of the viewport in world coordinates
-  const centerX = -offsetX / scale + (canvas.width / 2) / scale;
-  const centerY = -offsetY / scale + (canvas.height / 2) / scale;
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.width / dpr;
+  const height = canvas.height / dpr;
+
+  const centerX = -offsetX / scale + (width / 2) / scale;
+  const centerY = -offsetY / scale + (height / 2) / scale;
 
   // Shadow vector points AWAY from sun. Sun direction is opposite.
   // Normalize shadow vector to get direction
@@ -1289,4 +1544,35 @@ function drawSelectionBox(ctx, box) {
   ctx.fillRect(x, y, w, h);
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
+}
+/**
+ * Check if a screen point is clicking on a wire
+ */
+export function getWireAtScreenPoint(screenX, screenY, wires, objects, offsetX, offsetY, scale) {
+  const worldPos = screenToWorld(screenX, screenY, offsetX, offsetY, scale);
+  const clickThreshold = 0.3; // meters
+
+  for (const wire of wires) {
+    const fromObj = objects.find(o => o.id === wire.from);
+    const toObj = objects.find(o => o.id === wire.to);
+    if (!fromObj || !toObj) continue;
+
+    const p1 = { x: fromObj.x + fromObj.w / 2, y: fromObj.y + fromObj.h / 2 };
+    const p2 = { x: toObj.x + toObj.w / 2, y: toObj.y + toObj.h / 2 };
+
+    // Check distance to line segment
+    const dist = distanceToSegment(worldPos, p1, p2);
+    if (dist < clickThreshold) {
+      return wire;
+    }
+  }
+  return null;
+}
+
+function distanceToSegment(p, v, w) {
+  const l2 = (w.x - v.x) ** 2 + (w.y - v.y) ** 2;
+  if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+  let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
 }

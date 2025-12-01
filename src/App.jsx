@@ -55,6 +55,39 @@ function SolarApp() {
     loadEquipment();
   }, [setEquipmentTypes, setEquipmentLibrary]);
 
+  // Auto-Save & Load Logic
+  const saveProject = useSolarStore((state) => state.saveProject);
+  const loadProject = useSolarStore((state) => state.loadProject);
+  const showToast = useSolarStore((state) => state.showToast);
+
+  // Load from LocalStorage on mount
+  useEffect(() => {
+    const savedProject = localStorage.getItem('solar_project_autosave');
+    if (savedProject) {
+      try {
+        const projectData = JSON.parse(savedProject);
+        loadProject(projectData);
+        showToast("Restored last session from auto-save", "info");
+      } catch (e) {
+        console.error("Failed to load auto-save", e);
+      }
+    }
+  }, []);
+
+  // Auto-Save every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const projectData = saveProject();
+      // Only save if there are objects or wires
+      if (projectData.objects.length > 0 || projectData.wires.length > 0) {
+        localStorage.setItem('solar_project_autosave', JSON.stringify(projectData));
+        showToast("Project auto-saved", "success");
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [saveProject, showToast]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center w-full h-screen bg-gray-900">

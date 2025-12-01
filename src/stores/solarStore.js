@@ -60,6 +60,8 @@ export const useSolarStore = create((set, get) => ({
   objects: [],
   wires: [],
   selectedObjectId: null,
+  selectedWireId: null,
+  additionalSelectedIds: [], // For multi-select
   additionalSelectedIds: [], // For multi-select
   selectionBox: null, // {x, y, w, h}
   clipboard: null,
@@ -104,6 +106,7 @@ export const useSolarStore = create((set, get) => ({
   isEvaluationOpen: false,
   isCustomComponentOpen: false,
   isMapSetupOpen: false,
+  isShortcutsOpen: false,
   evaluationData: null,
 
   // Map State
@@ -112,9 +115,17 @@ export const useSolarStore = create((set, get) => ({
     geminiApiKey: "",
     zoom: 20,
     mapImage: null,
+    mapImage: null,
     mapOverlayActive: false,
   },
+
+  // Toast Notification
+  toast: { message: "", type: "info", visible: false },
+  showToast: (message, type = "info") => set({ toast: { message, type, visible: true } }),
+  hideToast: () => set((state) => ({ toast: { ...state.toast, visible: false } })),
+
   setMapSetupOpen: (isOpen) => set({ isMapSetupOpen: isOpen }),
+  setShortcutsOpen: (isOpen) => set({ isShortcutsOpen: isOpen }),
   setMapSettings: (settings) =>
     set((state) => ({ mapSettings: { ...state.mapSettings, ...settings } })),
   theme: "dark", // dark, light, sepia
@@ -177,7 +188,8 @@ export const useSolarStore = create((set, get) => ({
       wires: state.wires.filter((wire) => wire.from !== id && wire.to !== id),
     })),
 
-  setSelectedObject: (id) => set({ selectedObjectId: id, additionalSelectedIds: [] }),
+  setSelectedObject: (id) => set({ selectedObjectId: id, selectedWireId: null, additionalSelectedIds: [] }),
+  setSelectedWire: (id) => set({ selectedWireId: id, selectedObjectId: null, additionalSelectedIds: [] }),
   setAdditionalSelectedIds: (ids) => set({ additionalSelectedIds: ids }),
 
   // Wire management
@@ -189,6 +201,13 @@ export const useSolarStore = create((set, get) => ({
   deleteWire: (id) =>
     set((state) => ({
       wires: state.wires.filter((wire) => wire.id !== id),
+    })),
+
+  updateWire: (id, updates) =>
+    set((state) => ({
+      wires: state.wires.map((wire) =>
+        wire.id === id ? { ...wire, ...updates } : wire
+      ),
     })),
 
   // History management

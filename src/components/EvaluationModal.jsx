@@ -25,6 +25,28 @@ export default function EvaluationModal() {
 
   const handleAiValidation = async () => {
     setIsValidating(true);
+    // 1. Identify implicit connections (Touching Panels)
+    const panels = objects.filter(o => o.type === 'panel');
+    const implicitWires = [];
+
+    for (let i = 0; i < panels.length; i++) {
+      for (let j = i + 1; j < panels.length; j++) {
+        const p1 = panels[i];
+        const p2 = panels[j];
+        const margin = 0.2; // Match powerFlow.js margin
+        const intersect = !(p2.x > p1.x + p1.w + margin ||
+          p2.x + p2.w + margin < p1.x ||
+          p2.y > p1.y + p1.h + margin ||
+          p2.y + p2.h + margin < p1.y);
+
+        if (intersect) {
+          implicitWires.push({ from: p1.id, to: p2.id, type: 'dc_wire', implicit: true });
+        }
+      }
+    }
+
+    const allWires = [...wires, ...implicitWires];
+
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validate-system`, {
         method: 'POST',
@@ -34,7 +56,7 @@ export default function EvaluationModal() {
         },
         body: JSON.stringify({
           objects,
-          wires,
+          wires: allWires,
           systemStats: {
             dcCapacity: evaluationData.dcCapacity,
             acCapacity: evaluationData.acCapacity,
@@ -501,6 +523,42 @@ export default function EvaluationModal() {
                   <i className="fas fa-plus mr-1"></i> Add Item
                 </button>
               </div>
+
+              {/* Simulation Status & Battery Meter */}
+              {evaluationData.batteryCapacity > 0 && (
+                <div className="bg-gray-800 p-3 rounded mb-4 border border-gray-600">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Battery Status</h4>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span>Capacity: {evaluationData.batteryCapacity} kWh</span>
+                        <span>Backup: {evaluationData.batteryBackupHours.toFixed(1)} hrs</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-2.5">
+                        <div className="bg-green-500 h-2.5 rounded-full" style={{ width: '100%' }}></div>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <i className="fas fa-battery-full text-2xl text-green-500"></i>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Simulation Logs / Issues */}
+              {evaluationData.issues && evaluationData.issues.length > 0 && (
+                <div className="bg-red-900/30 border border-red-700 p-3 rounded mb-4">
+                  <h4 className="text-xs font-bold text-red-400 uppercase mb-2">Simulation Issues</h4>
+                  <ul className="text-xs space-y-1 text-red-200">
+                    {evaluationData.issues.map((issue, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <i className="fas fa-exclamation-triangle mt-0.5"></i>
+                        <span>{issue}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
 
 

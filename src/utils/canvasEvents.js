@@ -1,6 +1,6 @@
 import { useSolarStore } from "../stores/solarStore";
 import { supabase } from "../lib/supabase";
-import { screenToWorld, getObjectAtScreenPoint, calculateOrthogonalPath, getResizeHandleAtPoint } from "./canvas";
+import { screenToWorld, getObjectAtScreenPoint, calculateOrthogonalPath, getResizeHandleAtPoint, getWireAtScreenPoint } from "./canvas";
 import { createRectangle, createPolygon, closePath, simplifyPath, createPanelArray, sortVerticesClockwise } from "./drawingTools";
 
 /**
@@ -143,26 +143,14 @@ export const handleCanvasEvents = {
 
           if (!isAlreadySelected) {
             store.setSelectedObject(obj.id);
+            // Clear wire selection when object is selected
+            if (store.selectedWireId) store.setSelectedWire(null);
           }
 
           this._isDragging = true;
           this._dragStartPos = worldPos;
-
           // Store start positions for all selected objects
           const allSelectedIds = [store.selectedObjectId, ...(store.additionalSelectedIds || [])].filter(Boolean);
-          // If we just selected a new object (isAlreadySelected is false), the store update might not be reflected in store.selectedObjectId yet if it's async? 
-          // Zustand is synchronous. So store.setSelectedObject(obj.id) updates state immediately.
-          // But wait, if !isAlreadySelected, we called setSelectedObject(obj.id), which clears additionalSelectedIds.
-          // So allSelectedIds will just be [obj.id]. Correct.
-
-          // Re-fetch state to be sure? No, store variable is const reference to state at start of function?
-          // No, useSolarStore.getState() returns current state object.
-          // But I assigned `const store = useSolarStore.getState()` at top of function.
-          // That object is a snapshot? No, it's the state object.
-          // But if I call `store.setSelectedObject`, does `store` variable update? 
-          // `store` is the return value of `getState()`. It's the state object AT THAT MOMENT.
-          // It does NOT update automatically.
-          // So I need to call `useSolarStore.getState()` again or manually construct the list.
 
           let currentSelectedIds = [];
           if (!isAlreadySelected) {
@@ -201,8 +189,26 @@ export const handleCanvasEvents = {
 
           this._dragStartObjPos = { x: obj.x, y: obj.y }; // Keep for legacy/primary alignment
         } else {
+          // Check for Wire Selection
+          const wire = getWireAtScreenPoint(
+            screenX,
+            screenY,
+            store.wires,
+            store.objects,
+            store.offsetX,
+            store.offsetY,
+            store.scale
+          );
+
+          if (wire) {
+            store.setSelectedWire(wire.id);
+            store.setSelectedObject(null); // Deselect objects
+            return;
+          }
+
           // Start Selection Box (Multi-select)
           store.setSelectedObject(null);
+          store.setSelectedWire(null);
           this._isSelecting = true;
           this._selectionStart = worldPos;
           store.setSelectionBox({ x: worldPos.x, y: worldPos.y, w: 0, h: 0 });
@@ -280,6 +286,28 @@ export const handleCanvasEvents = {
             sts_rating: 200, // A
             battery_capacity: 200, // kWh
             mppt_channels: 1
+          };
+        } else if (objType === "pss") {
+          newObject.specifications = {
+            rating_amps: 100,
+            voltage_rating: 415,
+            switching_time_ms: 20,
+            logic: "auto" // auto, manual_grid, manual_battery
+          };
+        } else if (objType === "grid") {
+          newObject.specifications = {
+            voltage: 11000 // Default 11kV
+          };
+        } else if (objType === "transformer") {
+          newObject.specifications = {
+            rating_kva: 500,
+            primary_voltage: 11000,
+            secondary_voltage: 415,
+            vector_group: "Dyn11"
+          };
+        } else if (objType === "master_plc") {
+          newObject.specifications = {
+            custom_logic: [] // Array of rules
           };
         }
 
@@ -563,7 +591,7 @@ export const handleCanvasEvents = {
   /**
    * Mouse up - End dragging or other operations
    */
-  onMouseUp(e, canvas) {
+  async onMouseUp(e, canvas) {
     const store = useSolarStore.getState();
 
     // Handle selection box end
@@ -582,6 +610,10 @@ export const handleCanvasEvents = {
 
         if (selected.length > 0) {
           store.setSelectedObject(selected[0].id);
+          if (selected.length > 1) {
+            const additionalIds = selected.slice(1).map(o => o.id);
+            store.setAdditionalSelectedIds(additionalIds);
+          }
         }
       }
 
@@ -608,18 +640,44 @@ export const handleCanvasEvents = {
         const wireType =
           store.mode === "wire_dc" ? "dc" : store.mode === "wire_ac" ? "ac" : "earth";
 
+        // Validate Connection
+        const { validateConnection } = await import("./simulation");
+        const validationError = validateConnection(this._wireStartObj, endObj, wireType);
+
+        if (validationError) {
+          // alert(`${validationError.type.toUpperCase()}: ${validationError.message}`);
+          store.showToast(`${validationError.type.toUpperCase()}: ${validationError.message}`, validationError.type);
+
+          // If it's an error, prevent connection. If warning, maybe allow?
+          // User said "immediately flag". Let's prevent on error, allow on warning but show alert.
+          if (validationError.type === 'error') {
+            this._wireCreationMode = false;
+            this._wireStartObj = null;
+            store.setDrawingPoints([]);
+            return;
+          }
+        }
+
         let path = null;
         if (store.cableMode === "ortho") {
           path = calculateOrthogonalPath(this._wireStartObj, endObj);
         }
 
+        const newWireId = Math.random().toString(36).slice(2);
         store.addWire({
           from: this._wireStartObj.id,
           to: endObj.id,
           type: wireType,
           path,
-          id: Math.random().toString(36).slice(2),
+          id: newWireId,
+          specifications: {
+            size_sqmm: 4,
+            length_m: 10, // Default placeholder, should be calculated
+            material: "Copper"
+          }
         });
+
+        store.setSelectedWire(newWireId);
 
         store.saveState();
       }
@@ -825,21 +883,97 @@ export const handleCanvasEvents = {
     const store = useSolarStore.getState();
 
     // Prevent deletion if active element is an input
-    if (e.key === "Delete" || e.key === "Backspace") {
-      if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")) {
-        return;
-      }
+    if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA" || document.activeElement.tagName === "SELECT")) {
+      return;
     }
 
+    // Toggle Shortcuts Modal
+    if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+      store.setShortcutsOpen(!store.isShortcutsOpen);
+      return;
+    }
+
+    // Undo/Redo
+    if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      e.preventDefault();
+      if (e.shiftKey) {
+        store.redo();
+      } else {
+        store.undo();
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      e.preventDefault();
+      store.redo();
+      return;
+    }
+
+    // Copy/Paste (Basic implementation)
+    if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      if (store.selectedObjectId) {
+        const obj = store.objects.find(o => o.id === store.selectedObjectId);
+        if (obj) {
+          // Store in local clipboard or store
+          // For now just console log, full clipboard needs store support
+          console.log("Copying", obj);
+        }
+      }
+      return;
+    }
+
+    // Delete
     if (e.key === "Delete" || e.key === "Backspace") {
       if (store.selectedObjectId) {
         store.deleteObject(store.selectedObjectId);
         store.setSelectedObject(null);
       }
+      if (store.selectedWireId) {
+        store.deleteWire(store.selectedWireId);
+        store.setSelectedWire(null);
+      }
       if (store.additionalSelectedIds && store.additionalSelectedIds.length > 0) {
         store.additionalSelectedIds.forEach(id => store.deleteObject(id));
         store.setAdditionalSelectedIds([]);
       }
+      store.saveState();
+      return;
+    }
+
+    // Escape
+    if (e.key === "Escape") {
+      if (store.drawingMode) {
+        store.clearDrawing();
+      } else if (store.selectedObjectId || store.selectedWireId) {
+        store.setSelectedObject(null);
+        store.setSelectedWire(null);
+      } else if (store.mode !== "select") {
+        store.setMode("select");
+      }
+      return;
+    }
+
+    // Mode Shortcuts
+    switch (e.key.toLowerCase()) {
+      case "s":
+        store.setMode("select");
+        break;
+      case "p":
+        store.setMode("pan");
+        break;
+      case "m":
+        store.setMode("measure");
+        break;
+      case "d":
+        store.setMode("delete");
+        break;
+      case "r":
+        store.setDrawingMode("rectangle");
+        store.setDrawingType("structure");
+        break;
+      case "l":
+        store.setMode("wire_dc");
+        break;
     }
   },
 

@@ -411,6 +411,12 @@ export default function LeftSidebar() {
                   <div className="font-bold text-[10px]">Grid Point</div>
                 </button>
                 <button
+                  onClick={() => handleAddMeter("transformer", "Transformer", "#f59e0b", 250000)}
+                  className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-amber-50 text-amber-900 hover:bg-amber-100"
+                >
+                  <div className="font-bold text-[10px]">Transformer</div>
+                </button>
+                <button
                   onClick={() => handleAddMeter("lt_panel", "LT Panel", "#475569", 50000)}
                   className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-slate-50 text-slate-900 hover:bg-slate-100"
                 >
@@ -445,6 +451,18 @@ export default function LeftSidebar() {
                   className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-emerald-100 text-emerald-900 hover:bg-emerald-200 col-span-2"
                 >
                   <div className="font-bold text-[10px]">BESS (PCS+STS+Batt)</div>
+                </button>
+                <button
+                  onClick={() => handleAddMeter("pss", "Power Switching", "#d97706", 45000)}
+                  className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-amber-100 text-amber-900 hover:bg-amber-200 col-span-2"
+                >
+                  <div className="font-bold text-[10px]">Power Switching (PLC)</div>
+                </button>
+                <button
+                  onClick={() => handleAddMeter("master_plc", "Plant Controller", "#4b5563", 150000)}
+                  className="p-2 rounded border border-gray-200 cursor-pointer text-center bg-gray-100 text-gray-900 hover:bg-gray-200 col-span-2"
+                >
+                  <div className="font-bold text-[10px]">Plant Controller (SCADA)</div>
                 </button>
               </div>
             )}
@@ -541,6 +559,6 @@ export default function LeftSidebar() {
 
         </div>
       </div>
-    </div>
+    </div >
   );
 }

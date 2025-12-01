@@ -4,6 +4,9 @@ import { renderCanvas, setColorTheme } from "../utils/canvas";
 import { handleCanvasEvents, handleAiImport } from "../utils/canvasEvents";
 import SimulationControls from "./SimulationControls";
 import MapOverlay from './MapOverlay';
+import ShortcutsModal from "./ShortcutsModal";
+import ToastNotification from "./ToastNotification";
+import { runLiveLogic } from "../utils/logicController";
 
 export default function Canvas() {
   const canvasRef = useRef(null);
@@ -28,8 +31,12 @@ export default function Canvas() {
   const mapSettings = useSolarStore((state) => state.mapSettings);
   const selectionBox = useSolarStore((state) => state.selectionBox);
   const aiImportMode = useSolarStore((state) => state.aiImportMode);
-  const store = useSolarStore();
+  const isShortcutsOpen = useSolarStore((state) => state.isShortcutsOpen);
+  const setShortcutsOpen = useSolarStore((state) => state.setShortcutsOpen);
+  const isAnimating = useSolarStore((state) => state.isAnimating);
+  const store = useSolarStore(); // Get the entire store for actions/state access
 
+  const flowOffset = useRef(0);
   const [loadedMapImage, setLoadedMapImage] = React.useState(null);
 
   // Load map image when URL changes
@@ -52,14 +59,81 @@ export default function Canvas() {
     setColorTheme(theme);
   }, [theme]);
 
+  // Live Logic Loop (PLC)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      runLiveLogic(store);
+    }, 1000); // Run every second
+
+    return () => clearInterval(interval);
+  }, [store.objects, store.sunTime]); // Depend on objects and sunTime to re-evaluate logic if they change
+
+  // Animation Loop
+  useEffect(() => {
+    let animationFrameId;
+
+    const render = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+
+      // Update flow offset
+      flowOffset.current = (performance.now() / 50) % 100;
+
+      // Get latest state
+      const state = useSolarStore.getState();
+
+      // Calculate meters per pixel (replicated logic)
+      const metersPerPixel = state.mapSettings?.zoom
+        ? 156543.03392 * Math.cos(state.latitude * Math.PI / 180) / Math.pow(2, state.mapSettings.zoom)
+        : 0.5;
+
+      renderCanvas(canvas, ctx, {
+        ...state,
+        mapImage: loadedMapImage,
+        mapMetersPerPixel: metersPerPixel,
+        flowOffset: flowOffset.current
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    if (isAnimating) {
+      render();
+    } else {
+      flowOffset.current = 0;
+      // Trigger a re-render to clear animation state
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        const state = useSolarStore.getState();
+        const metersPerPixel = state.mapSettings?.zoom
+          ? 156543.03392 * Math.cos(state.latitude * Math.PI / 180) / Math.pow(2, state.mapSettings.zoom)
+          : 0.5;
+        renderCanvas(canvas, ctx, {
+          ...state,
+          mapImage: loadedMapImage,
+          mapMetersPerPixel: metersPerPixel,
+          flowOffset: 0
+        });
+      }
+    }
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [isAnimating, loadedMapImage]);
+
+  // Main Render Effect (Static updates and event listeners)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     // Set canvas size
     const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
 
     const ctx = canvas.getContext("2d");
     setCanvas(canvas, ctx);
@@ -79,75 +153,35 @@ export default function Canvas() {
       wires,
       selectedObjectId,
       additionalSelectedIds,
-      selectionBox,
       sunTime,
       orientation,
       cableMode,
       lat: latitude,
       lon: longitude,
-      showCompass: false,
       drawingMode,
       drawingPoints,
       drawingPreview,
+      selectionBox,
+      alignmentGuides: store.alignmentGuides,
+      measureStart: store.measureStart,
+      measureEnd: store.measureEnd,
       mapImage: loadedMapImage,
       mapMetersPerPixel: metersPerPixel,
+      flowOffset: flowOffset.current // Pass current offset
     });
 
-    // Handle events
-    const handleMouseDown = (e) => handleCanvasEvents.onMouseDown(e, canvas);
-    const handleMouseMove = (e) => handleCanvasEvents.onMouseMove(e, canvas);
-    const handleMouseUp = (e) => handleCanvasEvents.onMouseUp(e, canvas);
-    const handleWheel = (e) => handleCanvasEvents.onWheel(e, canvas);
-    const handleKeyDown = (e) => handleCanvasEvents.onKeyDown(e);
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      handleCanvasEvents.onContextMenu(e, canvas);
-    };
+    // Event listeners
+    // These are handled by the onMouseDown etc. props on the canvas element now
+    // The handleCanvasEvents utility function takes care of dispatching actions
+    // based on the event type and current store state.
+    // No need to add/remove event listeners here explicitly for mouse/touch events.
+    // Only window-level events like keydown need to be managed here.
 
-    canvas.addEventListener("mousedown", handleMouseDown, { passive: true });
-    canvas.addEventListener("mousemove", handleMouseMove, { passive: true });
-    canvas.addEventListener("mouseup", handleMouseUp, { passive: true });
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
-    canvas.addEventListener("contextmenu", handleContextMenu, { passive: false });
+    const handleKeyDown = (e) => handleCanvasEvents.onKeyDown(e);
     window.addEventListener("keydown", handleKeyDown, { passive: false });
 
-    // Animation loop
-    let animationFrameId;
-    const render = () => {
-      renderCanvas(canvas, ctx, {
-        scale,
-        offsetX,
-        offsetY,
-        showGrid,
-        objects,
-        wires,
-        selectedObjectId,
-        additionalSelectedIds,
-        selectionBox,
-        sunTime,
-        orientation,
-        cableMode,
-        lat: latitude,
-        lon: longitude,
-        showCompass: false,
-        drawingMode,
-        drawingPoints,
-        drawingPreview,
-        mapImage: loadedMapImage,
-        mapMetersPerPixel: metersPerPixel,
-      });
-      animationFrameId = requestAnimationFrame(render);
-    };
-    render();
-
     return () => {
-      canvas.removeEventListener("mousedown", handleMouseDown, { passive: true });
-      canvas.removeEventListener("mousemove", handleMouseMove, { passive: true });
-      canvas.removeEventListener("mouseup", handleMouseUp, { passive: true });
-      canvas.removeEventListener("wheel", handleWheel, { passive: false });
-      canvas.removeEventListener("contextmenu", handleContextMenu, { passive: false });
-      window.removeEventListener("keydown", handleKeyDown, { passive: true });
-      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener("keydown", handleKeyDown, { passive: false });
     };
   }, [
     setCanvas,
@@ -159,97 +193,71 @@ export default function Canvas() {
     wires,
     selectedObjectId,
     additionalSelectedIds,
-    orientation,
     sunTime,
+    orientation,
+    cableMode,
     latitude,
     longitude,
-    cableMode,
     drawingMode,
     drawingPoints,
     drawingPreview,
+    selectionBox,
+    store.alignmentGuides, // Depend on store parts if they trigger a re-render
+    store.measureStart,
+    store.measureEnd,
     loadedMapImage,
     mapSettings,
-    selectionBox,
+    // isAnimating is NOT here to avoid conflict, handled by separate effect
   ]);
 
   return (
-    <div className="flex-1 overflow-hidden relative">
+    <div className="relative w-full h-full bg-gray-900 overflow-hidden">
       <canvas
         ref={canvasRef}
-        className="w-full h-full"
-        style={{ imageRendering: "pixelated" }}
+        className="block w-full h-full cursor-crosshair touch-none"
+        onMouseDown={(e) => handleCanvasEvents.onMouseDown(e, canvasRef.current)}
+        onMouseMove={(e) => handleCanvasEvents.onMouseMove(e, canvasRef.current)}
+        onMouseUp={(e) => handleCanvasEvents.onMouseUp(e, canvasRef.current)}
+        onWheel={(e) => handleCanvasEvents.onWheel(e, canvasRef.current)}
+        onContextMenu={(e) => e.preventDefault()}
       />
 
-      {aiImportMode && (
-        <MapOverlay onMapClick={(points) => handleAiImport(points, store)} />
-      )}
+      {/* Overlays */}
+      <div className="absolute top-4 left-4 z-10 pointer-events-none">
+        <h1 className="text-xl font-bold text-white drop-shadow-md">
+          Solar Architect <span className="text-xs font-normal opacity-70">Grid Master v1.2</span>
+        </h1>
+      </div>
 
       <SimulationControls />
-      {/* Bottom Right Overlay (Compass & Legend) */}
-      <div className="absolute bottom-4 right-4 bg-gray-900/80 p-3 rounded text-xs text-gray-300 border border-gray-700 select-none pointer-events-none z-10">
-        {/* Compass */}
-        <div className="flex items-center gap-2 mb-2 border-b border-gray-700 pb-2">
-          <div className="w-8 h-8 relative border-2 border-gray-500 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-500 bg-gray-800">
-            E
-            <div className="absolute -right-1 top-1/2 w-2 h-0.5 bg-red-500"></div>
-            {/* Needle */}
-            <div
-              className="absolute w-0.5 h-3 bg-blue-400 origin-bottom bottom-1/2 left-1/2 transform -translate-x-1/2 transition-transform"
-              style={{ transform: `translateX(-50%) rotate(${parseInt(orientation)}deg)` }}
-            ></div>
-          </div>
-          <div>
-            <div className="font-bold text-white">Orientation</div>
-            <div className="text-gray-500 text-[10px]">East Indicator</div>
-          </div>
-        </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-3 h-3 bg-yellow-500/20 border border-yellow-500 rounded-full"></div> Sun Path
-        </div>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-3 h-3 bg-black/50 border border-black"></div> Shadow (Ground)
-        </div>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-3 h-3 bg-black/30 border border-black"></div> Shadow (Roof)
-        </div>
+      {mapSettings.mapOverlayActive && (
+        <MapOverlay />
+      )}
 
-        {/* Playback Controls (Duplicate) */}
-        {/* <div className="mt-3 pt-3 border-t border-gray-700">
-          <div className="flex items-center gap-2"> */}
-        {/* Play/Pause Button - We need to access store state for this, but we are inside Canvas. 
-                 We can use the store hooks if we import them or just use what we have. 
-                 We need isAnimating and setIsAnimating. 
-                 Let's add them to the component state selectors at the top.
-             */}
-        {/* 
-                NOTE: Since I cannot easily add hooks at the top in this replace block without replacing the whole file, 
-                I will assume the user can control playback from the left panel for now, 
-                OR I will add the hooks in a separate step if needed. 
-                Actually, I can't add functionality here without the hooks. 
-                I will render the UI but make the buttons non-functional or just visual for now 
-                unless I do a full file replacement. 
-                
-                Wait, I can use useSolarStore.getState() in event handlers if I really wanted to, 
-                but that's anti-pattern.
-                
-                Let's just render the UI to match the look. The left panel has the functional controls.
-             */}
-        {/* <button className="bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 text-xs w-8 transition pointer-events-auto">
-              <i className="fas fa-play"></i>
+      {/* Shortcuts Modal */}
+      <ShortcutsModal isOpen={isShortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      {/* Toast Notifications */}
+      <ToastNotification />
+
+      {/* AI Import Modal */}
+      {aiImportMode && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h2 className="text-xl font-bold text-white mb-4">AI Building Import</h2>
+            <p className="text-gray-300 mb-4">
+              Click on the map to select a location to import building data.
+            </p>
+            <button
+              onClick={() => store.setAiImportMode(false)}
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded"
+            >
+              Cancel
             </button>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              defaultValue="10"
-              className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer pointer-events-auto"
-              title="Speed"
-            />
           </div>
-        </div> */}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

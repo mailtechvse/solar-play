@@ -8,16 +8,127 @@ export default function RightPanel() {
   const updateObject = useSolarStore((state) => state.updateObject);
   const deleteObject = useSolarStore((state) => state.deleteObject);
 
+  const selectedWireId = useSolarStore((state) => state.selectedWireId);
+  const setSelectedWireStore = useSolarStore((state) => state.setSelectedWire);
+  const wires = useSolarStore((state) => state.wires);
+  const updateWire = useSolarStore((state) => state.updateWire);
+  const deleteWire = useSolarStore((state) => state.deleteWire);
+
   const [selectedObject, setSelectedObjectLocal] = useState(null);
+  const [selectedWire, setSelectedWireLocal] = useState(null);
 
   useEffect(() => {
     if (selectedObjectId) {
       const obj = objects.find((o) => o.id === selectedObjectId);
       setSelectedObjectLocal(obj);
+      setSelectedWireLocal(null);
+    } else if (selectedWireId) {
+      const wire = wires.find((w) => w.id === selectedWireId);
+      setSelectedWireLocal(wire);
+      setSelectedObjectLocal(null);
     } else {
       setSelectedObjectLocal(null);
+      setSelectedWireLocal(null);
     }
-  }, [selectedObjectId, objects]);
+  }, [selectedObjectId, selectedWireId, objects, wires]);
+
+  if (selectedWire) {
+    return (
+      <div className="absolute top-0 right-0 h-full w-64 bg-white border-l border-gray-200 shadow-2xl z-20 flex flex-col font-sans animate-slide-in-right">
+        <div className="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="font-bold text-gray-700 uppercase text-xs tracking-wider">Wire Details</h3>
+          <button
+            onClick={() => setSelectedWireStore(null)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <i className="fas fa-xmark"></i>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto bg-white">
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-gray-800 font-bold text-sm uppercase">{selectedWire.type} Cable</h3>
+              <button
+                onClick={() => deleteWire(selectedWire.id)}
+                className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition"
+              >
+                <i className="fas fa-trash"></i>
+              </button>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-100 p-3 rounded text-xs text-yellow-800">
+              <h4 className="font-bold mb-1 flex items-center gap-1">
+                <i className="fas fa-info-circle"></i> Connection Info
+              </h4>
+              <p className="leading-relaxed opacity-90">
+                Connecting two components. Ensure cable size is sufficient for the current rating.
+              </p>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div>
+                <label className="text-gray-500 font-medium">Cable Type</label>
+                <select
+                  value={selectedWire.type}
+                  onChange={(e) => updateWire(selectedWire.id, { type: e.target.value })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                >
+                  <option value="dc">DC Cable (Solar)</option>
+                  <option value="ac">AC Cable (Grid/Load)</option>
+                  <option value="earth">Earthing Strip</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-500 font-medium">Size (sqmm)</label>
+                <select
+                  value={selectedWire.specifications?.size_sqmm || 4}
+                  onChange={(e) => updateWire(selectedWire.id, { specifications: { ...selectedWire.specifications, size_sqmm: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                >
+                  <option value={2.5}>2.5 sqmm</option>
+                  <option value={4}>4 sqmm</option>
+                  <option value={6}>6 sqmm</option>
+                  <option value={10}>10 sqmm</option>
+                  <option value={16}>16 sqmm</option>
+                  <option value={25}>25 sqmm</option>
+                  <option value={35}>35 sqmm</option>
+                  <option value={50}>50 sqmm</option>
+                  <option value={70}>70 sqmm</option>
+                  <option value={95}>95 sqmm</option>
+                  <option value={120}>120 sqmm</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-500 font-medium">Material</label>
+                <select
+                  value={selectedWire.specifications?.material || "Copper"}
+                  onChange={(e) => updateWire(selectedWire.id, { specifications: { ...selectedWire.specifications, material: e.target.value } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                >
+                  <option value="Copper">Copper</option>
+                  <option value="Aluminum">Aluminum</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-gray-500 font-medium">Length (m)</label>
+                <input
+                  type="number"
+                  value={selectedWire.specifications?.length_m || 10}
+                  onChange={(e) => updateWire(selectedWire.id, { specifications: { ...selectedWire.specifications, length_m: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Estimated length based on path + vertical drops.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedObject) return null;
 
@@ -36,14 +147,34 @@ export default function RightPanel() {
       <div className="flex-1 overflow-y-auto bg-white">
         <div className="p-4 space-y-4">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <h3 className="text-gray-800 font-bold text-sm">{selectedObject.label || selectedObject.type}</h3>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <label className="text-[10px] text-gray-400 font-bold uppercase">Name</label>
+              <input
+                type="text"
+                value={selectedObject.label || selectedObject.type}
+                onChange={(e) => updateObject(selectedObject.id, { label: e.target.value })}
+                className="w-full text-sm font-bold text-gray-800 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none bg-transparent px-0 py-0.5"
+                placeholder="Component Name"
+              />
+            </div>
             <button
               onClick={() => deleteObject(selectedObject.id)}
-              className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition"
+              className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition shrink-0"
+              title="Delete Component"
             >
               <i className="fas fa-trash"></i>
             </button>
+          </div>
+
+          {/* Component Know-How / Description */}
+          <div className="bg-blue-50 border border-blue-100 p-3 rounded text-xs text-blue-800">
+            <h4 className="font-bold mb-1 flex items-center gap-1">
+              <i className="fas fa-info-circle"></i> What is this?
+            </h4>
+            <p className="leading-relaxed opacity-90">
+              {getComponentDescription(selectedObject)}
+            </p>
           </div>
 
           {/* Basic Properties */}
@@ -57,6 +188,68 @@ export default function RightPanel() {
                 className="w-full mt-1 px-2 py-1 bg-gray-100 border border-gray-300 text-gray-600 rounded"
               />
             </div>
+
+            {/* Grid Outage Settings */}
+            {selectedObject.type === 'grid' && (
+              <div className="mt-4 bg-red-50 p-2 rounded border border-red-100">
+                <label className="text-[10px] text-red-500 font-bold uppercase mb-2 block">Grid Outage Plan</label>
+
+                <div className="mb-2">
+                  <label className="text-[10px] text-gray-500 font-bold">Type</label>
+                  <select
+                    value={selectedObject.specifications?.outage_type || 'None'}
+                    onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, outage_type: e.target.value } })}
+                    className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                  >
+                    <option value="None">None (Always ON)</option>
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Random">Random (Unreliable)</option>
+                  </select>
+                </div>
+
+                {selectedObject.specifications?.outage_type === 'Scheduled' && (
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-gray-500 font-bold">Start (Hr)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="24"
+                        value={selectedObject.specifications?.outage_start || 16}
+                        onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, outage_start: parseFloat(e.target.value) } })}
+                        className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-gray-500 font-bold">End (Hr)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="24"
+                        value={selectedObject.specifications?.outage_end || 18}
+                        onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, outage_end: parseFloat(e.target.value) } })}
+                        className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {selectedObject.specifications?.outage_type === 'Random' && (
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold">Max Duration (Hrs)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="24"
+                      value={selectedObject.specifications?.outage_duration || 5}
+                      onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, outage_duration: parseFloat(e.target.value) } })}
+                      className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                    />
+                    <p className="text-[9px] text-gray-400 mt-1">Will randomly fail for up to {selectedObject.specifications?.outage_duration || 5} hours.</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -125,9 +318,11 @@ export default function RightPanel() {
                   <input
                     type="number"
                     step="0.1"
+                    min="0"
                     value={selectedObject.relative_h || 0.1}
                     onChange={(e) => {
-                      const newRelH = parseFloat(e.target.value);
+                      let newRelH = parseFloat(e.target.value);
+                      if (newRelH < 0) newRelH = 0; // Prevent negative height
                       const oldRelH = selectedObject.relative_h || 0.1;
                       const baseH = (selectedObject.h_z || 0) - oldRelH;
                       updateObject(selectedObject.id, {
@@ -257,6 +452,25 @@ export default function RightPanel() {
             </div>
           )}
 
+          {(selectedObject.type === 'battery' || selectedObject.type === 'bess') && (
+            <div className="border-t border-gray-200 pt-4">
+              <label className="text-gray-500 font-medium text-xs">State of Charge (SOC)</label>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden border border-gray-300">
+                  <div
+                    className={`h-full transition-all duration-300 ${(selectedObject.soc || 0) < 20 ? 'bg-red-500' :
+                        (selectedObject.soc || 0) < 50 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                    style={{ width: `${selectedObject.soc || 0}%` }}
+                  ></div>
+                </div>
+                <span className="text-xs font-bold text-gray-700 w-10 text-right">
+                  {(selectedObject.soc || 0).toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          )}
+
           {selectedObject.type === "load" && (
             <div className="border-t border-gray-200 pt-4">
               <label className="text-gray-500 font-medium text-xs">Monthly Consumption (Units)</label>
@@ -276,19 +490,38 @@ export default function RightPanel() {
             </div>
           )}
 
-          {/* Power Switch for Panels */}
-          {(selectedObject.type === 'lt_panel' || selectedObject.type === 'ht_panel' || selectedObject.type === 'acdb') && (
+          {/* Power Switch for Panels and Grid */}
+          {(selectedObject.type === 'lt_panel' || selectedObject.type === 'ht_panel' || selectedObject.type === 'acdb' || selectedObject.type === 'grid' || selectedObject.type === 'vcb' || selectedObject.type === 'acb') && (
             <div className="border-t border-gray-200 pt-4">
               <div className="flex items-center justify-between">
-                <label className="text-gray-500 font-medium text-xs">Power Status</label>
+                <label className="text-gray-500 font-medium text-xs">
+                  {selectedObject.type === 'grid' ? 'Grid Availability' : 'Power Status'}
+                </label>
                 <button
                   onClick={() => updateObject(selectedObject.id, { isOn: selectedObject.isOn === false ? true : false })}
                   className={`px-3 py-1 rounded-full text-xs font-bold transition ${selectedObject.isOn !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}
                 >
-                  {selectedObject.isOn !== false ? 'ON' : 'OFF'}
+                  {selectedObject.isOn !== false ? (selectedObject.type === 'grid' ? 'AVAILABLE' : 'ON') : (selectedObject.type === 'grid' ? 'OUTAGE' : 'OFF')}
                 </button>
               </div>
+
+              {selectedObject.type === 'grid' && (
+                <div className="mt-3">
+                  <label className="text-gray-500 font-medium text-xs">Grid Voltage</label>
+                  <select
+                    value={selectedObject.specifications?.voltage || 11000}
+                    onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, voltage: parseInt(e.target.value) } })}
+                    className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                  >
+                    <option value={230}>230 V (1-Phase)</option>
+                    <option value={415}>415 V (3-Phase)</option>
+                    <option value={11000}>11 kV</option>
+                    <option value={33000}>33 kV</option>
+                    <option value={66000}>66 kV</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -308,7 +541,7 @@ export default function RightPanel() {
             </div>
           )}
 
-          {/* VCB/ACB Specs */}
+          {/* VCB/ACB Specs & Logic */}
           {(selectedObject.type === 'vcb' || selectedObject.type === 'acb') && (
             <div className="border-t border-gray-200 pt-4">
               <h4 className="text-gray-600 font-bold text-xs mb-2">Breaker Specs</h4>
@@ -329,6 +562,356 @@ export default function RightPanel() {
                   onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, current_rating: parseFloat(e.target.value) } })}
                   className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
                 />
+              </div>
+
+              {/* Logic Builder */}
+              <div className="mt-4 border-t border-gray-100 pt-2">
+                <h4 className="text-gray-600 font-bold text-xs mb-2 flex items-center justify-between">
+                  <span>Programmable Logic (PLC)</span>
+                  <button
+                    onClick={() => {
+                      const currentLogic = selectedObject.specifications?.custom_logic || [];
+                      updateObject(selectedObject.id, {
+                        specifications: {
+                          ...selectedObject.specifications,
+                          custom_logic: [...currentLogic, { param: 'Voltage', op: '>', val: 0, action: 'Trip' }]
+                        }
+                      });
+                    }}
+                    className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-200 hover:bg-blue-100"
+                  >
+                    + Add Rule
+                  </button>
+                </h4>
+
+                <div className="space-y-2">
+                  {(selectedObject.specifications?.custom_logic || []).map((rule, idx) => (
+                    <div key={idx} className="bg-gray-50 p-2 rounded border border-gray-200 text-xs">
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="font-bold text-gray-500">IF</span>
+                        <select
+                          value={rule.param}
+                          onChange={(e) => {
+                            const newLogic = [...selectedObject.specifications.custom_logic];
+                            newLogic[idx].param = e.target.value;
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="w-20 px-1 py-0.5 border rounded"
+                        >
+                          <option value="Voltage">Voltage</option>
+                          <option value="Current">Current</option>
+                          <option value="Frequency">Freq</option>
+                        </select>
+                        <select
+                          value={rule.op}
+                          onChange={(e) => {
+                            const newLogic = [...selectedObject.specifications.custom_logic];
+                            newLogic[idx].op = e.target.value;
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="w-10 px-1 py-0.5 border rounded"
+                        >
+                          <option value=">">&gt;</option>
+                          <option value="<">&lt;</option>
+                          <option value="=">=</option>
+                        </select>
+                        <input
+                          type="number"
+                          value={rule.val}
+                          onChange={(e) => {
+                            const newLogic = [...selectedObject.specifications.custom_logic];
+                            newLogic[idx].val = parseFloat(e.target.value);
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="w-16 px-1 py-0.5 border rounded"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 justify-between">
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-gray-500">THEN</span>
+                          <select
+                            value={rule.action}
+                            onChange={(e) => {
+                              const newLogic = [...selectedObject.specifications.custom_logic];
+                              newLogic[idx].action = e.target.value;
+                              updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                            }}
+                            className="w-20 px-1 py-0.5 border rounded text-red-600 font-medium"
+                          >
+                            <option value="Trip">Trip</option>
+                            <option value="Close">Close</option>
+                            <option value="Alarm">Alarm</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const newLogic = selectedObject.specifications.custom_logic.filter((_, i) => i !== idx);
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(!selectedObject.specifications?.custom_logic || selectedObject.specifications.custom_logic.length === 0) && (
+                    <p className="text-gray-400 italic text-[10px] text-center py-2">No logic rules defined.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Master PLC Specs */}
+          {selectedObject.type === 'master_plc' && (
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-gray-600 font-bold text-xs mb-2">Plant Controller Logic</h4>
+
+              <div className="mt-2 border-t border-gray-100 pt-2">
+                <button
+                  onClick={() => {
+                    const currentLogic = selectedObject.specifications?.custom_logic || [];
+                    updateObject(selectedObject.id, {
+                      specifications: {
+                        ...selectedObject.specifications,
+                        custom_logic: [...currentLogic, { targetId: '', param: 'GridVoltage', op: '<', val: 0, action: 'Trip' }]
+                      }
+                    });
+                  }}
+                  className="w-full text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 mb-2"
+                >
+                  + Add Global Rule
+                </button>
+
+                {/* Source Priority Control */}
+                <div className="mb-4 bg-gray-50 p-2 rounded border border-gray-200">
+                  <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Source Priority</label>
+                  <div className="space-y-1">
+                    {(selectedObject.specifications?.source_priority || ['Solar', 'Battery', 'Grid']).map((source, idx, arr) => (
+                      <div key={source} className="flex items-center justify-between bg-white px-2 py-1 border rounded text-xs shadow-sm">
+                        <span className="font-medium text-gray-700">{idx + 1}. {source}</span>
+                        <div className="flex gap-1">
+                          <button
+                            disabled={idx === 0}
+                            onClick={() => {
+                              const newPriority = [...(selectedObject.specifications?.source_priority || ['Solar', 'Battery', 'Grid'])];
+                              [newPriority[idx - 1], newPriority[idx]] = [newPriority[idx], newPriority[idx - 1]];
+                              updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, source_priority: newPriority } });
+                            }}
+                            className={`text-[10px] px-1 rounded ${idx === 0 ? 'text-gray-300' : 'text-blue-500 hover:bg-blue-50'}`}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            disabled={idx === arr.length - 1}
+                            onClick={() => {
+                              const newPriority = [...(selectedObject.specifications?.source_priority || ['Solar', 'Battery', 'Grid'])];
+                              [newPriority[idx + 1], newPriority[idx]] = [newPriority[idx], newPriority[idx + 1]];
+                              updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, source_priority: newPriority } });
+                            }}
+                            className={`text-[10px] px-1 rounded ${idx === arr.length - 1 ? 'text-gray-300' : 'text-blue-500 hover:bg-blue-50'}`}
+                          >
+                            ▼
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {(selectedObject.specifications?.custom_logic || []).map((rule, idx) => (
+                    <div key={idx} className="bg-gray-50 p-2 rounded border border-gray-200 text-xs">
+                      <div className="mb-1">
+                        <label className="text-[10px] text-gray-500 font-bold">Target Device:</label>
+                        <select
+                          value={rule.targetId}
+                          onChange={(e) => {
+                            const newLogic = [...selectedObject.specifications.custom_logic];
+                            newLogic[idx].targetId = e.target.value;
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="w-full mt-0.5 px-1 py-0.5 border rounded text-[10px]"
+                        >
+                          <option value="">Select Device...</option>
+                          {objects.filter(o => o.type === 'vcb' || o.type === 'acb').map(o => (
+                            <option key={o.id} value={o.id}>{o.label || o.type} ({o.id.slice(0, 4)})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1 mb-1">
+                        <select
+                          value={rule.type || 'Threshold'}
+                          onChange={(e) => {
+                            const newLogic = [...selectedObject.specifications.custom_logic];
+                            const updatedRule = { ...newLogic[idx], type: e.target.value };
+
+                            // Reset params based on type
+                            if (e.target.value === 'Time') {
+                              updatedRule.param = 'Time';
+                              updatedRule.op = 'Between';
+                              updatedRule.val = 18; // Start hour
+                              updatedRule.val2 = 6; // End hour
+                            } else if (e.target.value === 'Interlock') {
+                              updatedRule.param = 'DeviceStatus';
+                              updatedRule.op = '=';
+                              updatedRule.val = 'ON';
+                            } else {
+                              updatedRule.param = 'GridVoltage';
+                              updatedRule.op = '<';
+                              updatedRule.val = 0;
+                            }
+
+                            newLogic[idx] = updatedRule;
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="w-20 px-1 py-0.5 border rounded text-[10px] font-bold bg-gray-100"
+                        >
+                          <option value="Threshold">Value</option>
+                          <option value="Interlock">Interlock</option>
+                          <option value="Time">Time</option>
+                        </select>
+
+                        {/* Threshold Inputs */}
+                        {(rule.type === 'Threshold' || !rule.type) && (
+                          <>
+                            <select
+                              value={rule.param}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].param = e.target.value;
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-20 px-1 py-0.5 border rounded"
+                            >
+                              <option value="GridVoltage">Grid V</option>
+                              <option value="GridFreq">Grid Hz</option>
+                            </select>
+                            <select
+                              value={rule.op}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].op = e.target.value;
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-10 px-1 py-0.5 border rounded"
+                            >
+                              <option value=">">&gt;</option>
+                              <option value="<">&lt;</option>
+                              <option value="=">=</option>
+                            </select>
+                            <input
+                              type="number"
+                              value={rule.val}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].val = parseFloat(e.target.value);
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-14 px-1 py-0.5 border rounded"
+                            />
+                          </>
+                        )}
+
+                        {/* Interlock Inputs */}
+                        {rule.type === 'Interlock' && (
+                          <>
+                            <select
+                              value={rule.sourceId || ''}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].sourceId = e.target.value;
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-24 px-1 py-0.5 border rounded text-[10px]"
+                            >
+                              <option value="">Check Device...</option>
+                              {objects.filter(o => (o.type === 'vcb' || o.type === 'acb') && o.id !== rule.targetId).map(o => (
+                                <option key={o.id} value={o.id}>{o.label || o.type} ({o.id.slice(0, 4)})</option>
+                              ))}
+                            </select>
+                            <span className="text-[10px] text-gray-500">is</span>
+                            <select
+                              value={rule.val}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].val = e.target.value;
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-14 px-1 py-0.5 border rounded"
+                            >
+                              <option value="ON">ON</option>
+                              <option value="OFF">OFF</option>
+                            </select>
+                          </>
+                        )}
+
+                        {/* Time Inputs */}
+                        {rule.type === 'Time' && (
+                          <>
+                            <span className="text-[10px] text-gray-500">Range:</span>
+                            <input
+                              type="number"
+                              min="0" max="23"
+                              value={rule.val}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].val = parseInt(e.target.value);
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-10 px-1 py-0.5 border rounded"
+                              placeholder="Start"
+                            />
+                            <span className="text-[10px] text-gray-500">-</span>
+                            <input
+                              type="number"
+                              min="0" max="23"
+                              value={rule.val2 || 0}
+                              onChange={(e) => {
+                                const newLogic = [...selectedObject.specifications.custom_logic];
+                                newLogic[idx].val2 = parseInt(e.target.value);
+                                updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                              }}
+                              className="w-10 px-1 py-0.5 border rounded"
+                              placeholder="End"
+                            />
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 justify-between">
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-gray-500">THEN</span>
+                          <select
+                            value={rule.action}
+                            onChange={(e) => {
+                              const newLogic = [...selectedObject.specifications.custom_logic];
+                              newLogic[idx].action = e.target.value;
+                              updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                            }}
+                            className="w-20 px-1 py-0.5 border rounded text-red-600 font-medium"
+                          >
+                            <option value="Trip">Trip</option>
+                            <option value="Close">Close</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const newLogic = selectedObject.specifications.custom_logic.filter((_, i) => i !== idx);
+                            updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, custom_logic: newLogic } });
+                          }}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(!selectedObject.specifications?.custom_logic || selectedObject.specifications.custom_logic.length === 0) && (
+                    <p className="text-gray-400 italic text-[10px] text-center py-2">No global rules defined.</p>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -370,6 +953,88 @@ export default function RightPanel() {
                   type="number"
                   value={selectedObject.specifications?.mppt_channels || 1}
                   onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, mppt_channels: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* PSS Specs */}
+          {selectedObject.type === 'pss' && (
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-gray-600 font-bold text-xs mb-2">Power Switching System (PLC)</h4>
+              <div>
+                <label className="text-gray-500 font-medium text-xs">Rating (Amps)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.rating_amps || 100}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, rating_amps: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Voltage Rating (V)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.voltage_rating || 415}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, voltage_rating: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Switching Logic</label>
+                <select
+                  value={selectedObject.specifications?.logic || 'auto'}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, logic: e.target.value } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                >
+                  <option value="auto">Auto (Grid Priority)</option>
+                  <option value="manual_grid">Manual (Grid Only)</option>
+                  <option value="manual_battery">Manual (Battery Only)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Transformer Specs */}
+          {selectedObject.type === 'transformer' && (
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-gray-600 font-bold text-xs mb-2">Transformer Specs</h4>
+              <div>
+                <label className="text-gray-500 font-medium text-xs">Rating (kVA)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.rating_kva || 500}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, rating_kva: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Primary Voltage (V)</label>
+                <select
+                  value={selectedObject.specifications?.primary_voltage || 11000}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, primary_voltage: parseInt(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                >
+                  <option value={11000}>11 kV</option>
+                  <option value={33000}>33 kV</option>
+                </select>
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Secondary Voltage (V)</label>
+                <input
+                  type="number"
+                  value={selectedObject.specifications?.secondary_voltage || 415}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, secondary_voltage: parseFloat(e.target.value) } })}
+                  className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-gray-500 font-medium text-xs">Vector Group</label>
+                <input
+                  type="text"
+                  value={selectedObject.specifications?.vector_group || "Dyn11"}
+                  onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, vector_group: e.target.value } })}
                   className="w-full mt-1 px-2 py-1 bg-white border border-gray-300 text-gray-800 rounded text-xs"
                 />
               </div>
@@ -501,4 +1166,35 @@ export default function RightPanel() {
       </div>
     </div>
   );
+}
+
+// Helper to get component descriptions
+function getComponentDescription(obj) {
+  const type = obj.type;
+  const subtype = obj.subtype;
+
+  if (type === 'panel' || type === 'Solar Panel') return "Captures sunlight and converts it into DC electricity. Key specs: Wattage (W) and Efficiency (%).";
+  if (type === 'inverter' || type === 'Inverter') return "Converts DC electricity from panels into AC electricity for home/grid use. Essential for powering appliances.";
+  if (type === 'battery' || type === 'Battery') return "Stores excess energy for use during power outages or at night. Critical for off-grid or hybrid systems.";
+  if (type === 'structure') return "Mounting system for solar panels. Can be Roof-mounted (RCC), Tin Shed, or Ground-mounted.";
+
+  if (type === 'grid') return "Connection point to the utility grid (11kV/33kV). Acts as the main power source or sink for export.";
+  if (type === 'transformer') return "Steps down high voltage (11kV) from grid to low voltage (415V) suitable for building use.";
+
+  if (type === 'lt_panel' || subtype === 'lt_panel') return "Low Tension (LT) Panel. Distributes 415V power to various loads and sub-panels. Contains breakers and meters.";
+  if (type === 'ht_panel' || subtype === 'ht_panel') return "High Tension (HT) Panel. Manages 11kV/33kV power before the transformer. Ensures safety at high voltage.";
+
+  if (type === 'vcb') return "Vacuum Circuit Breaker (VCB). A robust switch for high voltage (11kV+) protection. Extinguishes arcs in a vacuum.";
+  if (type === 'acb') return "Air Circuit Breaker (ACB). A heavy-duty switch for low voltage (415V) high-current protection. Prevents overloads.";
+
+  if (type === 'bess') return "Battery Energy Storage System (BESS). Large-scale storage with integrated Power Conversion System (PCS) and Static Transfer Switch (STS).";
+  if (type === 'pss') return "Power Switching System (PSS) with PLC. Intelligently switches between Grid, Generator, and Battery sources based on logic.";
+
+  if (type === 'acdb' || subtype === 'acdb') return "AC Distribution Box. A smaller panel for distributing AC power to specific appliances or rooms.";
+  if (subtype === 'la') return "Lightning Arrestor. Protects the system and structure from direct lightning strikes by grounding the surge.";
+  if (subtype === 'earth') return "Earthing Pit. Provides a low-resistance path to ground for fault currents, ensuring safety for personnel and equipment.";
+
+  if (type === 'load') return "Simulates electrical consumption (e.g., HVAC, Lights, Motors). Used to test if the system can meet demand.";
+
+  return "Select a component to view its details and usage.";
 }

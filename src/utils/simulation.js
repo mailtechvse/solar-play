@@ -54,24 +54,8 @@ export function runSimulation(objects, wires, params) {
     }
   }
 
-  // Check if system exists
-  if (dcCapacityKwp === 0) {
-    return {
-      valid: false,
-      message: 'No solar panels in design',
-      score: 0,
-      dcCapacity: 0,
-      acCapacity: 0,
-      batteryCapacity: 0,
-      batteryBackupHours: 0,
-      annualGeneration: 0,
-      shadowLoss: 0,
-      monthlyData: [],
-      yearlyData: [],
-      issues: ['ERROR: No solar panels in design'],
-      validations: [],
-    };
-  }
+  // Check if system exists (removed early return to allow load calculation)
+  // if (dcCapacityKwp === 0) { ... }
 
   // Total load (base + load boxes)
   const totalMonthlyLoad = baseLoad + loadBoxes.reduce((sum, b) => sum + (b.units || 0), 0);
@@ -83,7 +67,7 @@ export function runSimulation(objects, wires, params) {
   const shadowLossPct = calculateYearlyShadowLoss(objects, latitude, longitude);
   const shadowLossFactor = 1 - shadowLossPct;
 
-  // Monthly simulation with seasonality
+  // Monthly simulation with seasonality and hourly granularity
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const seasonality = [0.8, 0.9, 1.1, 1.2, 1.25, 1.1, 1.0, 0.95, 0.95, 1.0, 0.9, 0.8];
 
@@ -93,45 +77,156 @@ export function runSimulation(objects, wires, params) {
   const monthlyGenData = [];
   const monthlyLossData = [];
 
-  months.forEach((month, i) => {
-    // Potential generation based on capacity, seasonality, and 4.5 peak sun hours average
-    const potentialGen = dcCapacityKwp * 4.5 * 30 * seasonality[i];
-    // Apply shadow loss and inverter efficiency
-    const actualGen = potentialGen * shadowLossFactor * inverterEfficiency;
-    const shadowLoss = potentialGen - (potentialGen * shadowLossFactor); // Loss due to shadow only
+  // Battery State
+  let currentBatteryKwh = 0; // Start empty or full? Let's say 0 for now
+  const batteryMaxKwh = batteryCapacityKwh;
+  const batteryEfficiency = 0.95;
+
+  months.forEach((month, monthIdx) => {
+    let monthGen = 0;
+    let monthLoad = 0;
+    let monthExport = 0;
+    let monthImport = 0;
+    let monthShadowLoss = 0;
+
+    // Simulate a typical day (24 hours) for this month
+    for (let hour = 0; hour < 24; hour++) {
+      // 1. Calculate Solar Generation for this hour
+      // Simple bell curve for solar generation between 6am and 6pm
+      let hourlyGen = 0;
+      if (hour >= 6 && hour <= 18) {
+        const peakHour = 12;
+        const sigma = 2.5;
+        const normalizedGen = Math.exp(-Math.pow(hour - peakHour, 2) / (2 * Math.pow(sigma, 2)));
+        // Scale by capacity and seasonality
+        // Peak generation is roughly capacity * efficiency
+        hourlyGen = dcCapacityKwp * normalizedGen * seasonality[monthIdx] * shadowLossFactor * inverterEfficiency;
+      }
+
+      // 2. Calculate Load for this hour
+      // Simple load profile: Peak in evening (6-10pm) and morning (7-9am)
+      const dailyLoad = totalMonthlyLoad / 30;
+      let hourlyLoad = dailyLoad / 24; // Base load
+      if ((hour >= 7 && hour <= 9) || (hour >= 18 && hour <= 22)) {
+        hourlyLoad *= 1.5; // Peak hours
+      } else if (hour >= 1 && hour <= 5) {
+        hourlyLoad *= 0.5; // Night hours
+      }
+
+      // 3. Execute PLC Logic (Time & Interlock)
+      // This is a simulation, so we can't change the actual object state in the store,
+      // but we can simulate the effect on power flow.
+      // For now, we'll check if any critical breakers are tripped by logic.
+      let gridAvailable = true;
+
+      // Check Master PLC Rules
+      const masterPlc = objects.find(o => o.type === 'master_plc');
+      if (masterPlc && masterPlc.specifications?.custom_logic) {
+        masterPlc.specifications.custom_logic.forEach(rule => {
+          if (rule.type === 'Time') {
+            const start = rule.val;
+            const end = rule.val2;
+            // Check if current hour is in range
+            let inRange = false;
+            if (start < end) {
+              inRange = hour >= start && hour < end;
+            } else {
+              // Crosses midnight (e.g. 18 to 6)
+              inRange = hour >= start || hour < end;
+            }
+
+            if (inRange && rule.action === 'Close') {
+              // Simulate device closing (if it was the grid breaker, grid becomes available)
+              // For simulation purposes, we assume logic works as intended
+            } else if (inRange && rule.action === 'Trip') {
+              // Simulate device tripping
+              if (rule.targetId) {
+                const target = objects.find(o => o.id === rule.targetId);
+                if (target && target.type === 'grid') gridAvailable = false;
+              }
+            }
+          }
+        });
+      }
+
+      // 4. Power Balance & Battery Logic
+      let availableGen = hourlyGen;
+      let netPower = availableGen - hourlyLoad;
+
+      if (netPower > 0) {
+        // Excess Generation: Charge Battery first
+        if (currentBatteryKwh < batteryMaxKwh) {
+          const chargeSpace = batteryMaxKwh - currentBatteryKwh;
+          const chargeAmount = Math.min(netPower, chargeSpace);
+          currentBatteryKwh += chargeAmount * batteryEfficiency;
+          netPower -= chargeAmount; // Remaining goes to grid
+        }
+        monthExport += netPower;
+      } else {
+        // Deficit: Discharge Battery first
+        const deficit = -netPower;
+        if (currentBatteryKwh > 0) {
+          const dischargeAmount = Math.min(deficit, currentBatteryKwh);
+          currentBatteryKwh -= dischargeAmount; // Discharge
+          const coveredLoad = dischargeAmount * batteryEfficiency;
+          netPower += coveredLoad; // Reduce deficit
+        }
+
+        // Remaining deficit comes from grid (if available)
+        if (netPower < 0) {
+          if (gridAvailable) {
+            monthImport += -netPower;
+          } else {
+            // Blackout / Unmet Load
+            // We could track this statistic
+          }
+        }
+      }
+
+      monthGen += hourlyGen;
+      monthLoad += hourlyLoad;
+      monthShadowLoss += (hourlyGen / shadowLossFactor) - hourlyGen;
+    }
+
+    // Scale daily simulation to month (30 days)
+    const actualGen = monthGen * 30;
+    const totalLoad = monthLoad * 30;
+    const netExport = monthExport * 30;
+    const netImport = monthImport * 30;
+    const shadowLoss = monthShadowLoss * 30;
 
     monthlyGenData.push(actualGen);
     monthlyLossData.push(shadowLoss);
     totalAnnualGen += actualGen;
 
-    // Net export/import
-    const netExport = actualGen - totalMonthlyLoad;
+    // Financials
+    // Net Metering: (Export * ExportRate) - (Import * GridRate)
+    // If Export > Import (in terms of value? No, usually units are netted first or monetary value)
+    // Let's assume monetary netting:
+    const exportValue = netExport * exportRate;
+    const importCost = netImport * gridRate;
+    const netMeteringBenefit = exportValue - importCost;
 
-    // Net metering: Savings + Income
-    // If exporting: Savings = Load * GridRate + Excess * ExportRate
-    // If importing: Savings = Gen * GridRate
-    let netMeteringBenefit = 0;
-    if (netExport > 0) {
-      netMeteringBenefit = (totalMonthlyLoad * gridRate) + (netExport * exportRate);
-    } else {
-      netMeteringBenefit = actualGen * gridRate;
-    }
-
-    // Gross metering: All generation sold at Export Rate (Grid Input Rate)
+    // Gross Metering: All Gen * ExportRate
     const grossMeteringIncome = actualGen * exportRate;
+
+    // Savings = Cost of Load (if no solar) - Actual Cost (Import - Export)
+    // Cost without solar = Total Load * GridRate
+    // Actual Cost = Import * GridRate - Export * ExportRate
+    // Savings = (Total Load * GridRate) - (Import * GridRate - Export * ExportRate)
+    const savings = (totalLoad * gridRate) - (importCost - exportValue);
 
     monthlyData.push({
       month,
       generation: actualGen,
-      load: totalMonthlyLoad,
+      load: totalLoad,
       netExport,
-      netMeteringIncome: netMeteringBenefit,
+      netMeteringIncome: savings, // Using savings as the benefit metric
       grossMeteringIncome,
       shadowLoss,
     });
 
-    // Accumulate total annual savings for ROI calculation
-    totalAnnualSavings += netMeteringBenefit;
+    totalAnnualSavings += savings;
   });
 
   // 25-year projection
@@ -328,6 +423,8 @@ export function validateSystem(objects, wires) {
 
   // Build adjacency list from wires
   const adj = {};
+
+  // 1. Add Explicit Wires
   wires.forEach(w => {
     const startObj = objects.find(o => o.id === w.from);
     const endObj = objects.find(o => o.id === w.to);
@@ -341,6 +438,27 @@ export function validateSystem(objects, wires) {
     if (!adj[w.to]) adj[w.to] = [];
     adj[w.to].push(w.from);
   });
+
+  // 2. Add Implicit Wires (Touching Panels)
+  const panelObjs = objects.filter(o => o.type === 'panel');
+  for (let i = 0; i < panelObjs.length; i++) {
+    for (let j = i + 1; j < panelObjs.length; j++) {
+      const p1 = panelObjs[i];
+      const p2 = panelObjs[j];
+      const margin = 0.2; // Match powerFlow.js margin
+      const intersect = !(p2.x > p1.x + p1.w + margin ||
+        p2.x + p2.w + margin < p1.x ||
+        p2.y > p1.y + p1.h + margin ||
+        p2.y + p2.h + margin < p1.y);
+
+      if (intersect) {
+        if (!adj[p1.id]) adj[p1.id] = [];
+        if (!adj[p2.id]) adj[p2.id] = [];
+        adj[p1.id].push(p2.id);
+        adj[p2.id].push(p1.id);
+      }
+    }
+  }
 
   // Check 1: Panels connected to inverter
   const panels = objects.filter(o => o.type === 'panel');
@@ -505,7 +623,204 @@ export function validateSystem(objects, wires) {
     });
   }
 
+  // Advanced Power Flow & Safety Checks
+  const powerFlowIssues = validatePowerFlow(objects, adj);
+  issues.push(...powerFlowIssues);
+
   return { issues, validations };
+}
+
+/**
+ * Advanced Power Flow Validation
+ * Checks for voltage mismatches, overloading, and logic errors
+ */
+function validatePowerFlow(objects, adj) {
+  const issues = [];
+
+  // 1. Check Voltage Mismatches
+  // Simple traversal: If two objects are connected, their voltage ratings should match (unless one is a transformer)
+  objects.forEach(obj => {
+    if (!adj[obj.id]) return;
+
+    const objVoltage = getVoltageRating(obj);
+    if (!objVoltage) return; // Skip if unknown
+
+    adj[obj.id].forEach(neighborId => {
+      const neighbor = objects.find(o => o.id === neighborId);
+      if (!neighbor) return;
+
+      // Transformers change voltage, so don't check equality across them directly here
+      if (obj.type === 'transformer' || neighbor.type === 'transformer') return;
+
+      const neighborVoltage = getVoltageRating(neighbor);
+      if (neighborVoltage && Math.abs(objVoltage - neighborVoltage) > (objVoltage * 0.1)) {
+        // Allow 10% tolerance
+        issues.push(`CRITICAL: Voltage Mismatch between ${obj.label || obj.type} (${objVoltage}V) and ${neighbor.label || neighbor.type} (${neighborVoltage}V). This will cause failure.`);
+      }
+    });
+  });
+
+  // 2. Check Power Switching System (PSS) Logic
+  const pssObjects = objects.filter(o => o.type === 'pss');
+  pssObjects.forEach(pss => {
+    // PSS should have at least 2 inputs (Grid, Battery/Gen) and 1 output (Load)
+    const neighbors = adj[pss.id] || [];
+    if (neighbors.length < 2) {
+      issues.push(`WARNING: Power Switching System (${pss.label}) has insufficient connections. Needs Source and Load.`);
+    }
+
+    // Check availability of sources
+    let hasGrid = false;
+    let hasBattery = false;
+
+    // BFS to find sources
+    const visited = new Set([pss.id]);
+    const queue = [pss.id];
+
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      const obj = objects.find(o => o.id === curr);
+
+      if (obj.type === 'grid') {
+        if (obj.isOn !== false) hasGrid = true; // Grid is available
+      }
+      if (obj.type === 'battery') hasBattery = true;
+
+      if (adj[curr]) {
+        adj[curr].forEach(n => {
+          if (!visited.has(n)) {
+            visited.add(n);
+            queue.push(n);
+          }
+        });
+      }
+    }
+
+    if (pss.specifications?.logic === 'manual_grid' && !hasGrid) {
+      issues.push(`CRITICAL: PSS set to 'Manual (Grid Only)' but Grid is unavailable (Outage or Disconnected). System will fail.`);
+    }
+
+    if (!hasGrid && !hasBattery) {
+      issues.push(`CRITICAL: No power source available for PSS. Grid is down and no Battery backup found.`);
+    }
+  });
+
+  // 3. Transformer Back-feed Check (Simplified)
+  // If a battery is connected to the secondary of a transformer without a PSS/Inverter isolation
+  // This requires graph traversal to find path from Battery -> Transformer
+
+  // 4. Validate Custom Logic (PLC)
+  objects.forEach(obj => {
+    if ((obj.type === 'vcb' || obj.type === 'acb') && obj.specifications?.custom_logic) {
+      obj.specifications.custom_logic.forEach(rule => {
+        // Check if rule triggers immediately based on static specs
+        if (rule.param === 'Voltage') {
+          const rating = obj.specifications.voltage_rating * 1000; // kV to V
+          if (rule.op === '>' && rating > rule.val && rule.action === 'Trip') {
+            issues.push(`WARNING: Logic Rule for ${obj.label || obj.type} (Voltage > ${rule.val}) will TRIP immediately because rated voltage is ${rating}V.`);
+          }
+          if (rule.op === '<' && rating < rule.val && rule.action === 'Trip') {
+            issues.push(`WARNING: Logic Rule for ${obj.label || obj.type} (Voltage < ${rule.val}) will TRIP immediately because rated voltage is ${rating}V.`);
+          }
+        }
+      });
+    }
+  });
+
+  return issues;
+}
+
+function getVoltageRating(obj) {
+  // Extract voltage from specifications or defaults
+  if (obj.type === 'grid') return obj.specifications?.voltage || 11000; // 11kV or 33kV
+  if (obj.type === 'transformer') return null; // Has primary/secondary
+  if (obj.type === 'panel') return 40; // Approx Vmp
+  if (obj.type === 'inverter') return obj.specifications?.output_voltage || 230;
+  if (obj.type === 'battery') return 48; // Default 48V system
+  if (obj.type === 'load') return 230;
+  if (obj.type === 'vcb') return (obj.specifications?.voltage_rating || 11) * 1000;
+  if (obj.type === 'acb') return (obj.specifications?.voltage_rating || 0.415) * 1000;
+  if (obj.type === 'pss') return obj.specifications?.voltage_rating || 415;
+
+  return null;
+  return null;
+}
+
+/**
+ * Validate a single connection between two objects
+ * @param {Object} fromObj
+ * @param {Object} toObj
+ * @param {string} wireType 'dc', 'ac', 'earth'
+ * @returns {Object|null} Error object { type: 'error'|'warning', message: string } or null if valid
+ */
+export function validateConnection(fromObj, toObj, wireType) {
+  if (!fromObj || !toObj) return null;
+
+  // 1. Check AC/DC Mismatch
+  const dcTypes = ['panel', 'battery'];
+  const acTypes = ['grid', 'load', 'acdb', 'lt_panel', 'ht_panel', 'vcb', 'acb', 'transformer', 'pss'];
+  const hybridTypes = ['inverter']; // Inverters have both DC (input) and AC (output) sides
+
+  // Determine if objects are strictly AC or DC
+  const isFromDC = dcTypes.includes(fromObj.type);
+  const isFromAC = acTypes.includes(fromObj.type);
+  const isToDC = dcTypes.includes(toObj.type);
+  const isToAC = acTypes.includes(toObj.type);
+
+  // Wire type check
+  if (wireType === 'dc') {
+    if (isFromAC || isToAC) {
+      return { type: 'error', message: 'Cannot use DC cable for AC components.' };
+    }
+  } else if (wireType === 'ac') {
+    if (isFromDC || isToDC) {
+      return { type: 'error', message: 'Cannot use AC cable for DC components.' };
+    }
+  }
+
+  // 2. Check Voltage Compatibility
+  const v1 = getVoltageRating(fromObj);
+  const v2 = getVoltageRating(toObj);
+
+  // Handle Transformer logic (Primary/Secondary)
+  if (fromObj.type === 'transformer' || toObj.type === 'transformer') {
+    // Transformer connection logic is complex (depends on which side is connected)
+    // For now, we skip strict voltage check if one is a transformer, 
+    // assuming the user connects to the correct winding.
+    // Ideally, we'd check if v_other matches primary or secondary.
+    const transformer = fromObj.type === 'transformer' ? fromObj : toObj;
+    const other = fromObj.type === 'transformer' ? toObj : fromObj;
+    const otherV = getVoltageRating(other);
+
+    if (otherV) {
+      const pV = transformer.specifications?.primary_voltage || 11000;
+      const sV = transformer.specifications?.secondary_voltage || 415;
+
+      // Check if other voltage matches either primary or secondary (with 10% tolerance)
+      const matchesPrimary = Math.abs(otherV - pV) < pV * 0.1;
+      const matchesSecondary = Math.abs(otherV - sV) < sV * 0.1;
+
+      if (!matchesPrimary && !matchesSecondary) {
+        return { type: 'warning', message: `Voltage Mismatch: ${other.label} (${otherV}V) does not match Transformer Primary (${pV}V) or Secondary (${sV}V).` };
+      }
+    }
+  } else if (v1 && v2) {
+    // Direct connection check
+    if (Math.abs(v1 - v2) > v1 * 0.1) {
+      return { type: 'error', message: `Voltage Mismatch: ${fromObj.label} (${v1}V) vs ${toObj.label} (${v2}V).` };
+    }
+  }
+
+  // 3. Check Inverter Connection Logic
+  if (fromObj.type === 'panel' && toObj.type === 'inverter') {
+    // Panel to Inverter is valid (DC)
+  } else if (fromObj.type === 'inverter' && toObj.type === 'panel') {
+    // Inverter to Panel is valid (DC)
+  } else if (fromObj.type === 'inverter' && toObj.type === 'grid') {
+    // Inverter to Grid is valid (AC)
+  }
+
+  return null;
 }
 
 /**
