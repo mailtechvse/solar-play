@@ -349,6 +349,14 @@ export default function TopBar() {
           {/* Grid & Cable */}
           <div className="flex items-center gap-2 mr-2">
             <button
+              // Navigate using window.location or Link if Router context available (it is)
+              onClick={() => window.location.href = '/operations'}
+              className="text-xs px-3 py-1 rounded text-white border border-blue-500 bg-blue-900/50 hover:bg-blue-800 flex items-center gap-2 font-bold shadow-sm shadow-blue-500/20 transition"
+              title="Switch to Operations Dashboard"
+            >
+              <i className="fas fa-chart-line"></i> Operations
+            </button>
+            <button
               onClick={() => setAiImportMode(!aiImportMode)}
               className={`text-xs px-2 py-1 rounded text-white border border-gray-600 flex items-center gap-2 ${aiImportMode ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-700 hover:bg-gray-600'}`}
               title="Click on a building on the map to import it"

@@ -34,6 +34,7 @@ export default function Canvas() {
   const isShortcutsOpen = useSolarStore((state) => state.isShortcutsOpen);
   const setShortcutsOpen = useSolarStore((state) => state.setShortcutsOpen);
   const isAnimating = useSolarStore((state) => state.isAnimating);
+  const setIsLogicProcessing = useSolarStore((state) => state.setIsLogicProcessing);
   const store = useSolarStore(); // Get the entire store for actions/state access
 
   const flowOffset = useRef(0);
@@ -59,14 +60,6 @@ export default function Canvas() {
     setColorTheme(theme);
   }, [theme]);
 
-  // Live Logic Loop (PLC)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      runLiveLogic(store);
-    }, 1000); // Run every second
-
-    return () => clearInterval(interval);
-  }, [store.objects, store.sunTime]); // Depend on objects and sunTime to re-evaluate logic if they change
 
   // Animation Loop
   useEffect(() => {
@@ -77,8 +70,10 @@ export default function Canvas() {
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
 
-      // Update flow offset
-      flowOffset.current = (performance.now() / 50) % 100;
+      // Update flow offset ONLY if logic is not processing (simulating pause)
+      if (!useSolarStore.getState().isLogicProcessing) {
+        flowOffset.current = (performance.now() / 50) % 100;
+      }
 
       // Get latest state
       const state = useSolarStore.getState();
@@ -177,7 +172,27 @@ export default function Canvas() {
     // No need to add/remove event listeners here explicitly for mouse/touch events.
     // Only window-level events like keydown need to be managed here.
 
-    const handleKeyDown = (e) => handleCanvasEvents.onKeyDown(e);
+    const handleKeyDown = (e) => {
+      // Handle global shortcuts here or delegate
+      if (e.key === 'r' || e.key === 'R') {
+        const store = useSolarStore.getState();
+        // 1. Rotate Placement Preview
+        const currentRot = store.placementRotation || 0;
+        store.setPlacementRotation((currentRot + 90) % 360);
+
+        // 2. Rotate Selected Object(s)
+        if (store.selectedObjectId) {
+          const obj = store.objects.find(o => o.id === store.selectedObjectId);
+          if (obj) {
+            store.updateObject(obj.id, { rotation: ((obj.rotation || 0) + 90) % 360 });
+          }
+        }
+      }
+
+      if (handleCanvasEvents.onKeyDown) {
+        handleCanvasEvents.onKeyDown(e);
+      }
+    };
     window.addEventListener("keydown", handleKeyDown, { passive: false });
 
     return () => {

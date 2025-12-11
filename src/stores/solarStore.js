@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { runSimulation } from "../utils/simulation";
 import { projectService } from "../lib/supabase";
+import { calculateFlows } from "../utils/powerFlow";
 
 export const useSolarStore = create((set, get) => ({
   // Canvas state
@@ -11,6 +12,9 @@ export const useSolarStore = create((set, get) => ({
   offsetY: 0,
   showGrid: true,
   showCompass: true,
+  showDimensions: false,
+  distanceGuides: [], // Guides showing distance between objects {x1, y1, x2, y2, label}
+
 
   // Mode and tools
   mode: "select", // select, measure, delete, wire_dc, wire_ac, earthing, structure, obstacle, draw_rect, draw_poly, draw_free
@@ -26,6 +30,13 @@ export const useSolarStore = create((set, get) => ({
   latitude: 28.6, // Default: Delhi
   longitude: 77.2,
   orientation: 0, // 0-360 degrees, 0=North, 90=East
+  placementRotation: 0, // Rotation for new objects being placed
+  showLabels: true,
+  showDimensions: false,
+  distanceGuides: [],
+  hoveredObjectId: null,
+  setHoveredObject: (id) => set({ hoveredObjectId: id }),
+
 
   // Financial Parameters
   gridRate: 8.5,
@@ -40,6 +51,7 @@ export const useSolarStore = create((set, get) => ({
   setLatitude: (latitude) => set({ latitude }),
   setLongitude: (longitude) => set({ longitude }),
   setOrientation: (orientation) => set({ orientation }),
+  setPlacementRotation: (rotation) => set({ placementRotation: rotation }),
 
   // Financial setters
   setGridRate: (gridRate) => set({ gridRate }),
@@ -76,6 +88,7 @@ export const useSolarStore = create((set, get) => ({
   sunTime: 10,
   showSun: true,
   isAnimating: false,
+  isLogicProcessing: false,
   animationSpeed: 1, // 0.5x, 1x, 2x, 4x
   simMonth: 0,
   simDayGen: 0,
@@ -84,6 +97,7 @@ export const useSolarStore = create((set, get) => ({
   simTotalExport: 0,
 
   setShowSun: (show) => set({ showSun: show }),
+  setIsLogicProcessing: (isProcessing) => set({ isLogicProcessing: isProcessing }),
 
   // Equipment
   equipmentTypes: [],
@@ -138,10 +152,32 @@ export const useSolarStore = create((set, get) => ({
   setScale: (scale) => set({ scale }),
   setOffset: (offsetX, offsetY) => set({ offsetX, offsetY }),
   setShowGrid: (showGrid) => set({ showGrid }),
+  setShowLabels: (show) => set({ showLabels: show }),
+
+  // Grouping Actions
+  groupObjects: (ids) => {
+    const groupId = crypto.randomUUID();
+    set((state) => ({
+      objects: state.objects.map(obj =>
+        ids.includes(obj.id) ? { ...obj, groupId } : obj
+      )
+    }));
+    return groupId;
+  },
+
+  ungroupObjects: (ids) => {
+    set((state) => ({
+      objects: state.objects.map(obj =>
+        ids.includes(obj.id) ? { ...obj, groupId: undefined } : obj
+      )
+    }));
+  },
 
   // Drawing tools
   setDrawingMode: (mode) => set({ drawingMode: mode }),
   setDrawingType: (type) => set({ drawingType: type }),
+  setDistanceGuides: (guides) => set({ distanceGuides: guides }),
+  setShowDimensions: (show) => set({ showDimensions: show }),
   setAlignmentGuides: (guides) => set({ alignmentGuides: guides }),
   setDrawingHeight: (height) => set({ drawingHeight: height }),
   addDrawingPoint: (point) =>
@@ -159,56 +195,82 @@ export const useSolarStore = create((set, get) => ({
     }),
 
   // Object management
-  addObject: (obj) =>
+  addObject: (object) =>
     set((state) => {
-      const newObjects = [...state.objects, obj];
-      return {
-        objects: newObjects,
-        history: [
-          ...state.history.slice(0, state.historyStep + 1),
-          JSON.stringify({
-            objects: newObjects,
-            wires: state.wires,
-          }),
-        ],
-        historyStep: state.historyStep + 1,
-      };
+      const newObjects = [...state.objects, object];
+      const flows = calculateFlows(newObjects, state.wires, { sunTime: state.sunTime });
+      const finalObjects = newObjects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+      return { objects: finalObjects };
     }),
 
   updateObject: (id, updates) =>
-    set((state) => ({
-      objects: state.objects.map((obj) =>
+    set((state) => {
+      const newObjects = state.objects.map((obj) =>
         obj.id === id ? { ...obj, ...updates } : obj
-      ),
-    })),
+      );
+      const flows = calculateFlows(newObjects, state.wires, { sunTime: state.sunTime });
+      const finalObjects = newObjects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+      return { objects: finalObjects };
+    }),
 
   deleteObject: (id) =>
-    set((state) => ({
-      objects: state.objects.filter((obj) => obj.id !== id),
-      wires: state.wires.filter((wire) => wire.from !== id && wire.to !== id),
-    })),
+    set((state) => {
+      const newObjects = state.objects.filter((obj) => obj.id !== id);
+      const newWires = state.wires.filter(
+        (wire) => wire.from !== id && wire.to !== id
+      );
+      const flows = calculateFlows(newObjects, newWires, { sunTime: state.sunTime });
+      const finalObjects = newObjects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+      return { objects: finalObjects, wires: newWires };
+    }),
+
+  addWire: (wire) =>
+    set((state) => {
+      const newWires = [...state.wires, wire];
+      const flows = calculateFlows(state.objects, newWires, { sunTime: state.sunTime });
+      const finalObjects = state.objects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+      return { objects: finalObjects, wires: newWires };
+    }),
+
+  deleteWire: (id) =>
+    set((state) => {
+      const newWires = state.wires.filter((wire) => wire.id !== id);
+      const flows = calculateFlows(state.objects, newWires, { sunTime: state.sunTime });
+      const finalObjects = state.objects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+      return { objects: finalObjects, wires: newWires };
+    }),
+
+  updateWire: (id, updates) =>
+    set((state) => {
+      const newWires = state.wires.map((wire) =>
+        wire.id === id ? { ...wire, ...updates } : wire
+      );
+      const flows = calculateFlows(state.objects, newWires, { sunTime: state.sunTime });
+      const finalObjects = state.objects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+      return { objects: finalObjects, wires: newWires };
+    }),
 
   setSelectedObject: (id) => set({ selectedObjectId: id, selectedWireId: null, additionalSelectedIds: [] }),
   setSelectedWire: (id) => set({ selectedWireId: id, selectedObjectId: null, additionalSelectedIds: [] }),
   setAdditionalSelectedIds: (ids) => set({ additionalSelectedIds: ids }),
-
-  // Wire management
-  addWire: (wire) =>
-    set((state) => ({
-      wires: [...state.wires, wire],
-    })),
-
-  deleteWire: (id) =>
-    set((state) => ({
-      wires: state.wires.filter((wire) => wire.id !== id),
-    })),
-
-  updateWire: (id, updates) =>
-    set((state) => ({
-      wires: state.wires.map((wire) =>
-        wire.id === id ? { ...wire, ...updates } : wire
-      ),
-    })),
 
   // History management
   undo: () =>
@@ -258,7 +320,14 @@ export const useSolarStore = create((set, get) => ({
   setSelectedPreset: (preset) => set({ selectedPreset: preset }),
 
   // Simulation
-  setSunTime: (sunTime) => set({ sunTime }),
+  setSunTime: (sunTime) => set((state) => {
+    const flows = calculateFlows(state.objects, state.wires, { sunTime });
+    const finalObjects = state.objects.map(obj => {
+      const flow = flows.get(obj.id);
+      return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+    });
+    return { sunTime, objects: finalObjects };
+  }),
   setIsAnimating: (isAnimating) => set({ isAnimating }),
   setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
   setSimulationData: (data) => set({ ...data }),

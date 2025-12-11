@@ -15,9 +15,12 @@ import SimulationControls from "./components/SimulationControls";
 import LoginPage from "./pages/LoginPage";
 import AuthCallback from "./pages/AuthCallback";
 import AdminPage from "./pages/AdminPage";
+import OperationsPage from "./pages/OperationsPage";
 import "./styles/index.css";
 
 function SolarApp() {
+  // ... existing SolarApp code ...
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const setEquipmentTypes = useSolarStore(
@@ -164,6 +167,10 @@ function App() {
         <Route
           path="/admin"
           element={isAuthenticated ? <AdminPage /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/operations"
+          element={isAuthenticated ? <OperationsPage /> : <Navigate to="/login" />}
         />
       </Routes>
     </Router>

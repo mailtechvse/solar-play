@@ -318,6 +318,106 @@ export const projectService = {
   },
 };
 
+// Operations Service
+export const operationsService = {
+  // Customers
+  async getCustomers() {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async createCustomer(customer) {
+    const { data, error } = await supabase
+      .from('customers')
+      .insert(customer)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateCustomer(id, updates) {
+    const { data, error } = await supabase
+      .from('customers')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteCustomer(id) {
+    const { error } = await supabase
+      .from('customers')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // User Assignments (using RPCs)
+  async getCustomerUsers(customerId) {
+    const { data, error } = await supabase
+      .rpc('get_customer_users', { p_customer_id: customerId });
+    if (error) throw error;
+    return data;
+  },
+
+  async assignUserToCustomer(email, customerId, role = 'viewer') {
+    const { data, error } = await supabase
+      .rpc('assign_user_to_customer_by_email', {
+        p_email: email,
+        p_customer_id: customerId,
+        p_role: role
+      });
+    if (error) throw error;
+    return data;
+  },
+
+  async removeUserFromCustomer(userId, customerId) {
+    const { error } = await supabase
+      .from('user_customers')
+      .delete()
+      .eq('user_id', userId)
+      .eq('customer_id', customerId);
+    if (error) throw error;
+  },
+
+  // Devices (Admin management)
+  async getCustomerDevices(customerId) {
+    const { data, error } = await supabase
+      .from('devices')
+      .select('*, integration:customer_integrations(manufacturer)')
+      .eq('customer_id', customerId);
+    if (error) throw error;
+    return data;
+  },
+
+  async addDevice(device) {
+    // Typically requires an integration_id. For admin manual add, we might need to find/create one.
+    // This is simplified.
+    const { data, error } = await supabase
+      .from('devices')
+      .insert(device)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteDevice(id) {
+    const { error } = await supabase
+      .from('devices')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  }
+};
+
 // Admin Service
 export const adminService = {
   // Check if user is admin
@@ -333,6 +433,21 @@ export const adminService = {
 
     if (error || !data) return false;
     return data.role === 'admin';
+  },
+
+  async verifyAdminAccess() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    // Check local whitelist/roles or table
+    const { data } = await supabase
+      .from('authorized_users')
+      .select('role')
+      .eq('email', user.email)
+      .eq('role', 'admin')
+      .single();
+
+    return !!data;
   },
 
   // Tax Slabs

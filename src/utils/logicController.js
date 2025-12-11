@@ -1,16 +1,39 @@
+import { calculateFlows } from './powerFlow';
 
 /**
  * Live Logic Controller (PLC)
  * Evaluates rules in real-time and updates component states.
  */
-export function runLiveLogic(store) {
+export async function runLiveLogic(store) {
+    // Simulate processing delay (Plant Controller "thinking" time)
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     const objects = store.objects;
     const updateObject = store.updateObject;
     const sunTime = store.sunTime; // 0-24 hour format
     let stateChanged = false;
-    let toastMessage = null;
+
+    // Calculate flows to detect trips (using current state)
+    const flows = calculateFlows(objects, store.wires);
 
     objects.forEach(obj => {
+        // 0. Auto-Trip/Reset Logic (VCB/ACB/Panels)
+        if (['vcb', 'acb', 'ht_panel', 'lt_panel', 'acdb'].includes(obj.type)) {
+            const flowData = flows.get(obj.id);
+            if (flowData) {
+                // Auto-Trip: If connected to outage grid, turn OFF
+                if (flowData.isTripped && obj.isOn !== false) {
+                    updateObject(obj.id, { isOn: false });
+                    stateChanged = true;
+                }
+                // Auto-Reset: If NOT tripped (grid healthy) and is connected to Healthy Grid, turn ON
+                else if (!flowData.isTripped && obj.isOn === false && flowData.canReset) {
+                    updateObject(obj.id, { isOn: true });
+                    stateChanged = true;
+                }
+            }
+        }
+
         if (obj.type === 'master_plc' && obj.specifications?.custom_logic) {
             obj.specifications.custom_logic.forEach(rule => {
 
@@ -27,11 +50,9 @@ export function runLiveLogic(store) {
                             if (rule.action === 'Trip' && target.isOn !== false) {
                                 updateObject(target.id, { isOn: false });
                                 stateChanged = true;
-                                toastMessage = { type: 'warning', message: `Interlock: ${target.label || 'Breaker'} TRIPPED because ${source.label || 'Source'} is ${rule.val}` };
                             } else if (rule.action === 'Close' && target.isOn === false) {
                                 updateObject(target.id, { isOn: true });
                                 stateChanged = true;
-                                toastMessage = { type: 'info', message: `Interlock: ${target.label || 'Breaker'} CLOSED because ${source.label || 'Source'} is ${rule.val}` };
                             }
                         }
                     }
@@ -56,11 +77,9 @@ export function runLiveLogic(store) {
                             if (rule.action === 'Trip' && target.isOn !== false) {
                                 updateObject(target.id, { isOn: false });
                                 stateChanged = true;
-                                toastMessage = { type: 'warning', message: `Time Rule: ${target.label || 'Breaker'} TRIPPED (Time: ${Math.floor(sunTime)}:00)` };
                             } else if (rule.action === 'Close' && target.isOn === false) {
                                 updateObject(target.id, { isOn: true });
                                 stateChanged = true;
-                                toastMessage = { type: 'info', message: `Time Rule: ${target.label || 'Breaker'} CLOSED (Time: ${Math.floor(sunTime)}:00)` };
                             }
                         }
                     }
@@ -69,10 +88,6 @@ export function runLiveLogic(store) {
             });
         }
     });
-
-    if (toastMessage && store.showToast) {
-        store.showToast(toastMessage.message, toastMessage.type);
-    }
 
     return stateChanged;
 }

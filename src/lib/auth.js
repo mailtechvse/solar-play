@@ -109,6 +109,11 @@ export const authService = {
 
   // Check if email is authorized
   async isEmailAuthorized(email) {
+    // If not authenticated, we can't check authorization against the current user
+    if (!(await this.isAuthenticated())) {
+      return false;
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke('check-auth');
 

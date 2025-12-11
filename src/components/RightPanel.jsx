@@ -17,6 +17,16 @@ export default function RightPanel() {
   const [selectedObject, setSelectedObjectLocal] = useState(null);
   const [selectedWire, setSelectedWireLocal] = useState(null);
 
+  const orientation = useSolarStore((state) => state.orientation);
+  const setOrientation = useSolarStore((state) => state.setOrientation);
+  const showDimensions = useSolarStore((state) => state.showDimensions);
+  const setShowDimensions = useSolarStore((state) => state.setShowDimensions);
+  const showLabels = useSolarStore((state) => state.showLabels);
+  const setShowLabels = useSolarStore((state) => state.setShowLabels);
+  const groupObjects = useSolarStore((state) => state.groupObjects);
+  const ungroupObjects = useSolarStore((state) => state.ungroupObjects);
+  const additionalSelectedIds = useSolarStore((state) => state.additionalSelectedIds);
+
   useEffect(() => {
     if (selectedObjectId) {
       const obj = objects.find((o) => o.id === selectedObjectId);
@@ -130,7 +140,77 @@ export default function RightPanel() {
     );
   }
 
-  if (!selectedObject) return null;
+  if (!selectedObject && !selectedWire) {
+    return (
+      <div className="absolute top-0 right-0 h-full w-64 bg-white border-l border-gray-200 shadow-2xl z-20 flex flex-col font-sans animate-slide-in-right">
+        <div className="p-3 bg-gray-50 border-b border-gray-200">
+          <h3 className="font-bold text-gray-700 uppercase text-xs tracking-wider">Project Settings</h3>
+        </div>
+        <div className="p-4 space-y-6">
+          <div>
+            <label className="text-gray-500 font-bold text-xs uppercase mb-2 block">Map Settings</label>
+
+            <div className="mb-4">
+              <label className="text-gray-500 font-medium text-xs mb-1 block">Orientation (Azimuth)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0" max="360"
+                  step="1"
+                  value={orientation || 0}
+                  onChange={e => setOrientation(parseFloat(e.target.value))}
+                  className="flex-1 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="360"
+                  value={orientation || 0}
+                  onChange={e => setOrientation(parseFloat(e.target.value))}
+                  className="w-12 text-xs font-mono font-bold text-gray-700 text-right border rounded px-1 py-0.5"
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                <span>N</span>
+                <span>E</span>
+                <span>S</span>
+                <span>W</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-4">
+              <label className="text-gray-500 font-medium text-xs">Show Dimensions</label>
+              <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                <input type="checkbox" name="toggle" id="toggle-dimensions"
+                  className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 checked:right-0 checked:border-green-400"
+                  checked={showDimensions || false}
+                  onChange={(e) => setShowDimensions(e.target.checked)}
+                />
+                <label htmlFor="toggle-dimensions" className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer ${showDimensions ? 'bg-green-400' : 'bg-gray-300'}`}></label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-4">
+              <label className="text-gray-500 font-medium text-xs">Show Labels</label>
+              <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                <input type="checkbox" name="toggle-labels" id="toggle-labels"
+                  className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 checked:right-0 checked:border-green-400"
+                  checked={showLabels}
+                  onChange={(e) => setShowLabels(e.target.checked)}
+                />
+                <label htmlFor="toggle-labels" className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer ${showLabels ? 'bg-green-400' : 'bg-gray-300'}`}></label>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400 italic">
+              <i className="fas fa-info-circle mr-1"></i>
+              Adjust north direction to align shadows correctly with the satellite map.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="absolute top-0 right-0 h-full w-64 bg-white border-l border-gray-200 shadow-2xl z-20 flex flex-col font-sans animate-slide-in-right">
@@ -165,6 +245,26 @@ export default function RightPanel() {
             >
               <i className="fas fa-trash"></i>
             </button>
+          </div>
+
+          {/* Grouping Controls */}
+          <div className="flex gap-2">
+            {(additionalSelectedIds?.length > 0) && (
+              <button
+                onClick={() => groupObjects([selectedObject.id, ...additionalSelectedIds])}
+                className="flex-1 py-1.5 px-2 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-300 font-medium transition"
+              >
+                <i className="fas fa-object-group mr-1"></i> Group Selected
+              </button>
+            )}
+            {selectedObject.groupId && (
+              <button
+                onClick={() => ungroupObjects([selectedObject.id])}
+                className="flex-1 py-1.5 px-2 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-300 font-medium transition"
+              >
+                <i className="fas fa-object-ungroup mr-1"></i> Ungroup
+              </button>
+            )}
           </div>
 
           {/* Component Know-How / Description */}
@@ -248,6 +348,70 @@ export default function RightPanel() {
                     <p className="text-[9px] text-gray-400 mt-1">Will randomly fail for up to {selectedObject.specifications?.outage_duration || 5} hours.</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Battery Settings */}
+            {(selectedObject.type === 'battery' || selectedObject.type === 'bess') && (
+              <div className="mt-4 bg-green-50 p-2 rounded border border-green-100">
+                <label className="text-[10px] text-green-600 font-bold uppercase mb-2 block">Battery Settings</label>
+
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold">Capacity (kWh)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={selectedObject.specifications?.battery_capacity || 5}
+                      onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, battery_capacity: parseFloat(e.target.value) } })}
+                      className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold">Initial SoC (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={selectedObject.specifications?.initial_soc !== undefined ? selectedObject.specifications.initial_soc : 20}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateObject(selectedObject.id, {
+                          soc: val,
+                          specifications: { ...selectedObject.specifications, initial_soc: val }
+                        });
+                      }}
+                      className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold">DoD (%)</label>
+                    <input
+                      type="number"
+                      min="10"
+                      max="100"
+                      value={selectedObject.specifications?.dod || 80}
+                      onChange={(e) => updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, dod: parseFloat(e.target.value) } })}
+                      className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold">Max Power (kW)</label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      value={selectedObject.specifications?.max_charge_kw || 2.5}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateObject(selectedObject.id, { specifications: { ...selectedObject.specifications, max_charge_kw: val, max_discharge_kw: val } });
+                      }}
+                      className="w-full mt-0.5 px-1 py-1 border rounded text-xs"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -459,7 +623,7 @@ export default function RightPanel() {
                 <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden border border-gray-300">
                   <div
                     className={`h-full transition-all duration-300 ${(selectedObject.soc || 0) < 20 ? 'bg-red-500' :
-                        (selectedObject.soc || 0) < 50 ? 'bg-yellow-500' : 'bg-green-500'
+                      (selectedObject.soc || 0) < 50 ? 'bg-yellow-500' : 'bg-green-500'
                       }`}
                     style={{ width: `${selectedObject.soc || 0}%` }}
                   ></div>

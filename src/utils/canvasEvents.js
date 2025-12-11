@@ -139,47 +139,55 @@ export const handleCanvasEvents = {
         );
 
         if (obj) {
-          const isAlreadySelected = obj.id === store.selectedObjectId || (store.additionalSelectedIds || []).includes(obj.id);
-
-          if (!isAlreadySelected) {
-            store.setSelectedObject(obj.id);
-            // Clear wire selection when object is selected
-            if (store.selectedWireId) store.setSelectedWire(null);
+          // Check for Grouping
+          // If object is part of a group, select all group members
+          let groupPeers = [];
+          if (obj.groupId) {
+            groupPeers = store.objects
+              .filter(o => o.groupId === obj.groupId && o.id !== obj.id)
+              .map(o => o.id);
           }
 
+          // Update selection
+          store.setSelectedObject(obj.id);
+          // Manually update additional selection for grouping
+          useSolarStore.setState({ additionalSelectedIds: groupPeers });
+
+          // Refresh store state for drag logic
+          const updatedStore = useSolarStore.getState();
+          const isAlreadySelected = obj.id === updatedStore.selectedObjectId || (updatedStore.additionalSelectedIds || []).includes(obj.id);
+
+          // Drag Init
           this._isDragging = true;
           this._dragStartPos = worldPos;
-          // Store start positions for all selected objects
-          const allSelectedIds = [store.selectedObjectId, ...(store.additionalSelectedIds || [])].filter(Boolean);
 
-          let currentSelectedIds = [];
-          if (!isAlreadySelected) {
-            currentSelectedIds = [obj.id];
-          } else {
-            currentSelectedIds = [store.selectedObjectId, ...(store.additionalSelectedIds || [])].filter(Boolean);
-          }
+          // Store start positions for all selected objects (Group + Multi-select)
+          const allSelectedIds = [updatedStore.selectedObjectId, ...(updatedStore.additionalSelectedIds || [])].filter(Boolean);
 
           this._dragStartPositions = {};
-          currentSelectedIds.forEach(id => {
-            const o = store.objects.find(obj => obj.id === id);
+          allSelectedIds.forEach(id => {
+            const o = updatedStore.objects.find(obj => obj.id === id);
             if (o) this._dragStartPositions[id] = { x: o.x, y: o.y };
           });
 
           // Identify children (objects on top of the selected object)
           this._dragChildrenIds = [];
+
           const children = store.objects.filter(other => {
             if (other.id === obj.id) return false;
-            if (currentSelectedIds.includes(other.id)) return false; // Already selected
+            if (allSelectedIds.includes(other.id)) return false; // Already selected
 
-            // Check if other is on top of obj
-            const cx = other.x + other.w / 2;
-            const cy = other.y + other.h / 2;
+            // Must be higher or equal (on top)
+            if ((other.h_z || 0) < (obj.h_z || 0)) return false;
 
-            // Simple bounds check
-            // Also check if other is strictly higher (child)
-            return (cx >= obj.x && cx <= obj.x + obj.w &&
-              cy >= obj.y && cy <= obj.y + obj.h &&
-              (other.h_z || 0) > (obj.h_z || 0));
+            // Intersection Area Check (More robust than center point)
+            const overlapW = Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x));
+            const overlapH = Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y));
+            const overlapArea = overlapW * overlapH;
+            const otherArea = other.w * other.h;
+
+            // If overlap covers > 30% of the child, drag it along
+            return overlapArea > (otherArea * 0.3);
           });
 
           this._dragChildrenIds = children.map(c => c.id);
@@ -197,7 +205,8 @@ export const handleCanvasEvents = {
             store.objects,
             store.offsetX,
             store.offsetY,
-            store.scale
+            store.scale,
+            store.cableMode
           );
 
           if (wire) {
@@ -240,12 +249,12 @@ export const handleCanvasEvents = {
         const newObject = {
           id: Math.random().toString(36).slice(2),
           type: objType,
-          x: worldPos.x,
-          y: worldPos.y,
+          x: worldPos.x - (equipment.width || 1) / 2,
+          y: worldPos.y - (equipment.height || 1) / 2,
           w: equipment.width || 1,
           h: equipment.height || 1,
           h_z: equipment.h_z || 0.5,
-          rotation: 0,
+          rotation: store.placementRotation || 0,
           cost: parseFloat(equipment.cost) || 0,
           color: equipment.color || "#1e3a8a",
           label: equipment.name,
@@ -257,8 +266,6 @@ export const handleCanvasEvents = {
         if (objType === "inverter") {
           newObject.capKw = equipment.specifications?.capacity_kw || 3;
           newObject.subtype = equipment.specifications?.inverter_type || "string";
-
-          // Default Inverter Settings
           newObject.specifications = {
             ...newObject.specifications,
             inverter_type: equipment.specifications?.inverter_type || "on_grid",
@@ -266,56 +273,43 @@ export const handleCanvasEvents = {
             efficiency: equipment.specifications?.efficiency || 97.5,
             max_dc_input: equipment.specifications?.max_dc_input || 600
           };
+          newObject.relative_h = 0.5; // Wall mounted
         } else if (objType === "battery") {
           newObject.capKwh = equipment.specifications?.capacity_kwh || 5;
+          newObject.relative_h = 0; // Floor
         } else if (objType === "panel") {
           newObject.watts = equipment.specifications?.watts || 550;
+          newObject.relative_h = 0.1; // Surface
         } else if (objType === "vcb") {
-          newObject.specifications = {
-            voltage_rating: 11, // kV
-            current_rating: 630 // A
-          };
+          newObject.specifications = { voltage_rating: 11, current_rating: 630 };
+          newObject.relative_h = 0;
         } else if (objType === "acb") {
-          newObject.specifications = {
-            voltage_rating: 0.415, // kV
-            current_rating: 800 // A
-          };
+          newObject.specifications = { voltage_rating: 0.415, current_rating: 800 };
+          newObject.relative_h = 0;
         } else if (objType === "bess") {
-          newObject.specifications = {
-            pcs_rating: 100, // kW
-            sts_rating: 200, // A
-            battery_capacity: 200, // kWh
-            mppt_channels: 1
-          };
+          newObject.specifications = { pcs_rating: 100, sts_rating: 200, battery_capacity: 200, mppt_channels: 1 };
+          newObject.relative_h = 0;
         } else if (objType === "pss") {
-          newObject.specifications = {
-            rating_amps: 100,
-            voltage_rating: 415,
-            switching_time_ms: 20,
-            logic: "auto" // auto, manual_grid, manual_battery
-          };
+          newObject.specifications = { rating_amps: 100, voltage_rating: 415, switching_time_ms: 20, logic: "auto" };
+          newObject.relative_h = 0;
         } else if (objType === "grid") {
-          newObject.specifications = {
-            voltage: 11000 // Default 11kV
-          };
+          newObject.specifications = { voltage: 11000 };
+          newObject.relative_h = 0;
         } else if (objType === "transformer") {
-          newObject.specifications = {
-            rating_kva: 500,
-            primary_voltage: 11000,
-            secondary_voltage: 415,
-            vector_group: "Dyn11"
-          };
+          newObject.specifications = { rating_kva: 500, primary_voltage: 11000, secondary_voltage: 415, vector_group: "Dyn11" };
+          newObject.relative_h = 0;
         } else if (objType === "master_plc") {
-          newObject.specifications = {
-            custom_logic: [] // Array of rules
-          };
+          newObject.specifications = { custom_logic: [] };
+          newObject.relative_h = 0;
+        } else {
+          newObject.relative_h = 0;
         }
 
-        // Ensure relative_h is set
-        newObject.relative_h = newObject.h_z;
-
         store.addObject(newObject);
-        break;
+        // Auto-layering (place on top of building if needed)
+        adjustObjectLayering(useSolarStore.getState(), newObject.id);
+        store.saveState();
+        return;
       }
 
       case "measure": {
@@ -388,6 +382,19 @@ export const handleCanvasEvents = {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const worldPos = screenToWorld(screenX, screenY, store.offsetX, store.offsetY, store.scale);
+
+    // Update Hovered Object State
+    const hoveredObj = getObjectAtScreenPoint(
+      screenX,
+      screenY,
+      store.objects,
+      store.offsetX,
+      store.offsetY,
+      store.scale
+    );
+    if (store.hoveredObjectId !== (hoveredObj?.id || null)) {
+      store.setHoveredObject(hoveredObj?.id || null);
+    }
 
     // Update cursor
     this._updateCursor(canvas, screenX, screenY);
@@ -511,6 +518,10 @@ export const handleCanvasEvents = {
         newX = x;
         newY = y;
         store.setAlignmentGuides(guides);
+
+        // precise distance guides
+        const distanceGuides = calculateDistanceGuides(newX, newY, selectedObj.w, selectedObj.h, store.objects, store.selectedObjectId);
+        store.setDistanceGuides(distanceGuides);
       }
 
       const appliedDeltaX = newX - this._dragStartObjPos.x;
@@ -537,11 +548,22 @@ export const handleCanvasEvents = {
         });
       }
 
-      // Check layering
-      adjustObjectLayering(store, store.selectedObjectId);
-      if (store.additionalSelectedIds) {
-        store.additionalSelectedIds.forEach(id => adjustObjectLayering(store, id));
-      }
+      // Check layering with FRESH state
+      const freshStore = useSolarStore.getState();
+
+      const allMovingIds = [...(store.additionalSelectedIds || []), ...(this._dragChildrenIds || [])];
+      if (store.selectedObjectId) allMovingIds.push(store.selectedObjectId);
+      const uniqueMovingIds = [...new Set(allMovingIds)];
+
+      // Update layering for the primary object
+      adjustObjectLayering(freshStore, store.selectedObjectId, uniqueMovingIds);
+
+      // Update layering for all other moving objects
+      uniqueMovingIds.forEach(id => {
+        if (id !== store.selectedObjectId) {
+          adjustObjectLayering(freshStore, id, uniqueMovingIds);
+        }
+      });
 
       return;
     }
@@ -576,6 +598,22 @@ export const handleCanvasEvents = {
       const startX = this._wireStartObj.x + this._wireStartObj.w / 2;
       const startY = this._wireStartObj.y + this._wireStartObj.h / 2;
       store.setDrawingPoints([{ x: startX, y: startY }, worldPos]);
+    }
+
+    // Preview Placement Ghost
+    if (store.mode === "place" && store.selectedPreset) {
+      store.setDrawingPreview({
+        ...store.selectedPreset,
+        type: store.selectedPreset.equipment_types?.name || store.selectedPreset.type || "custom",
+        x: worldPos.x - (store.selectedPreset.width || 1) / 2, // Center it
+        y: worldPos.y - (store.selectedPreset.height || 1) / 2,
+        w: store.selectedPreset.width || 1,
+        h: store.selectedPreset.height || 1,
+        rotation: store.placementRotation || 0,
+        isGhost: true
+      });
+    } else if (store.mode !== "place" && store.drawingPreview?.isGhost) {
+      store.setDrawingPreview(null);
     }
 
     // Preview measurement
@@ -700,6 +738,7 @@ export const handleCanvasEvents = {
     if (this._isDragging) {
       this._isDragging = false;
       store.setAlignmentGuides([]); // Clear alignment guides
+      store.setDistanceGuides([]); // Clear distance guides
 
       // Complete rectangle drawing
       if (store.drawingMode === "rectangle" && this._drawingStartPos && store.drawingPoints.length === 2) {
@@ -1166,27 +1205,40 @@ function calculateAlignment(x, y, w, h, objects, excludeId) {
 /**
  * Helper to adjust object height and render order based on parent structure
  */
-function adjustObjectLayering(store, objectId) {
+function adjustObjectLayering(store, objectId, movingIds = []) {
   const objects = store.objects;
   const obj = objects.find(o => o.id === objectId);
   if (!obj) return;
 
   // Find parent structure
-  const centerX = obj.x + obj.w / 2;
-  const centerY = obj.y + obj.h / 2;
-
   let parent = null;
   let maxHz = -1;
 
+  // console.log(`[Layering] Checking ${obj.label || obj.id} (${obj.type}) at z=${obj.h_z?.toFixed(2)}`);
+
   for (const other of objects) {
     if (other.id === obj.id) continue;
+
+    // If the other object is also moving, prevent cyclic stacking.
+    // Rule: An object can only sit on a moving peer if it is ALREADY visually above it.
+    // This prevents a base object from jumping on top of its own child.
+    if (movingIds.includes(other.id)) {
+      if ((obj.h_z || 0) <= (other.h_z || 0)) continue;
+    }
+
     // Only consider structures as parents
     if (other.type !== 'structure' && other.type !== 'tinshed' && other.type !== 'polygon') continue;
 
-    // Check bounds
-    if (centerX >= other.x && centerX <= other.x + other.w &&
-      centerY >= other.y && centerY <= other.y + other.h) {
-      // If polygon, do precise check? For now bbox is fine.
+    // Check overlap (Area Intersection)
+    const overlapW = Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x));
+    const overlapH = Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y));
+    const overlapArea = overlapW * overlapH;
+    const objArea = obj.w * obj.h;
+
+    // console.log(`  vs ${other.label || other.id}: Overlap=${overlapArea.toFixed(2)} / Threshold=${(objArea * 0.01).toFixed(2)}`);
+
+    // Use overlap check (stick to parent if > 1% overlap)
+    if (overlapArea > (objArea * 0.01)) {
       if ((other.h_z || 0) > maxHz) {
         maxHz = other.h_z || 0;
         parent = other;
@@ -1195,16 +1247,27 @@ function adjustObjectLayering(store, objectId) {
   }
 
   if (parent) {
-    const newHz = parent.h_z + (obj.relative_h || 0.1);
+    // console.log(`  -> New Parent: ${parent.label || parent.id} (h_z: ${parent.h_z}, height: ${parent.height})`);
+
+    // Calculate new Height Z (Hz) relative to parent's top surface
+    // Structures/Tinsheds have a Z-height (thickness). Other objects are treated as flat surfaces unless specified.
+    // Default structure height is 3m if not defined.
+    const parentZHeight = (parent.type === 'structure' || parent.type === 'tinshed')
+      ? (parent.height !== undefined ? parent.height : 3)
+      : (parent.height || 0);
+
+    const newHz = parent.h_z + parentZHeight + (obj.relative_h || 0.1);
 
     // If height changed, update it
-    if (obj.h_z !== newHz) {
+    if (Math.abs(obj.h_z - newHz) > 0.001) {
+      console.log(`[Layering] Updating ${obj.label || obj.id}: z ${obj.h_z?.toFixed(2)} -> ${newHz.toFixed(2)} (Parent: ${parent.label})`);
       store.updateObject(obj.id, { h_z: newHz });
     }
   } else {
     // On ground - reset to relative height
     const newHz = obj.relative_h || 0.1;
-    if (obj.h_z !== newHz) {
+    if (Math.abs(obj.h_z - newHz) > 0.001) {
+      console.log(`[Layering] Dropping ${obj.label || obj.id} to ground: z ${obj.h_z?.toFixed(2)} -> ${newHz.toFixed(2)}`);
       store.updateObject(obj.id, { h_z: newHz });
     }
   }
@@ -1824,5 +1887,111 @@ async function cropImageToBounds(base64Image, bounds) {
       img.src = `data:image/png;base64,${base64Image}`;
     }
   });
+}
+
+/**
+ * Calculate distance guides between the moving object and nearby objects
+ */
+function calculateDistanceGuides(x, y, w, h, objects, excludeId) {
+  const guides = [];
+  const maxDistance = 15.0; // Show guides for objects within 15 meters
+
+  const myLeft = x;
+  const myRight = x + w;
+  const myTop = y;
+  const myBottom = y + h;
+
+  // Find nearest object in each direction
+  let minDiffLeft = Infinity, nearestLeft = null;
+  let minDiffRight = Infinity, nearestRight = null;
+  let minDiffTop = Infinity, nearestTop = null;
+  let minDiffBottom = Infinity, nearestBottom = null;
+
+  for (const obj of objects) {
+    if (obj.id === excludeId) continue;
+
+    const objLeft = obj.x;
+    const objRight = obj.x + obj.w;
+    const objTop = obj.y;
+    const objBottom = obj.y + obj.h;
+
+    // Check overlap in Y for X-distance
+    const overlapY = Math.min(myBottom, objBottom) - Math.max(myTop, objTop);
+    if (overlapY > 0) {
+      // Object is to my left
+      if (objRight <= myLeft) {
+        const dist = myLeft - objRight;
+        if (dist >= 0 && dist < maxDistance && dist < minDiffLeft) {
+          minDiffLeft = dist;
+          nearestLeft = obj;
+        }
+      }
+      // Object is to my right
+      if (objLeft >= myRight) {
+        const dist = objLeft - myRight;
+        if (dist >= 0 && dist < maxDistance && dist < minDiffRight) {
+          minDiffRight = dist;
+          nearestRight = obj;
+        }
+      }
+    }
+
+    // Check overlap in X for Y-distance
+    const overlapX = Math.min(myRight, objRight) - Math.max(myLeft, objLeft);
+    if (overlapX > 0) {
+      // Object is above me
+      if (objBottom <= myTop) {
+        const dist = myTop - objBottom;
+        if (dist >= 0 && dist < maxDistance && dist < minDiffTop) {
+          minDiffTop = dist;
+          nearestTop = obj;
+        }
+      }
+      // Object is below me
+      if (objTop >= myBottom) {
+        const dist = objTop - myBottom;
+        if (dist >= 0 && dist < maxDistance && dist < minDiffBottom) {
+          minDiffBottom = dist;
+          nearestBottom = obj;
+        }
+      }
+    }
+  }
+
+  // Create guides
+  if (nearestLeft) {
+    const midY = (Math.max(myTop, nearestLeft.y) + Math.min(myBottom, nearestLeft.y + nearestLeft.h)) / 2;
+    guides.push({
+      x1: nearestLeft.x + nearestLeft.w, y1: midY,
+      x2: myLeft, y2: midY,
+      label: `${minDiffLeft.toFixed(2)}m`
+    });
+  }
+  if (nearestRight) {
+    const midY = (Math.max(myTop, nearestRight.y) + Math.min(myBottom, nearestRight.y + nearestRight.h)) / 2;
+    guides.push({
+      x1: myRight, y1: midY,
+      x2: nearestRight.x, y2: midY,
+      label: `${minDiffRight.toFixed(2)}m`
+    });
+  }
+  if (nearestTop) {
+    const midX = (Math.max(myLeft, nearestTop.x) + Math.min(myRight, nearestTop.x + nearestTop.w)) / 2;
+    guides.push({
+      x1: midX, y1: nearestTop.y + nearestTop.h,
+      x2: midX, y2: myTop,
+      label: `${minDiffTop.toFixed(2)}m`
+    });
+  }
+  if (nearestBottom) {
+    const midX = (Math.max(myLeft, nearestBottom.x) + Math.min(myRight, nearestBottom.x + nearestBottom.w)) / 2;
+    guides.push({
+      x1: midX, y1: myBottom,
+      x2: midX, y2: nearestBottom.y,
+      label: `${minDiffBottom.toFixed(2)}m`
+    });
+  }
+
+  return guides;
 }
 

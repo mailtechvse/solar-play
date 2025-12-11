@@ -5,7 +5,28 @@
  * Implements Priority-Based Balancing: User defined priority.
  */
 
-export function calculateFlows(objects, wires, generationMap = new Map(), batteryLimits = new Map(), priority = ['Solar', 'Battery', 'Grid']) {
+export function calculateFlows(objects, wires, options = {}) {
+    const {
+        generationMap = null,
+        batteryLimits = new Map(),
+        priority = ['Solar', 'Battery', 'Grid'],
+        sunTime = 12
+    } = options;
+
+    // Calculate Generation if map not provided
+    const genMap = generationMap || new Map();
+    if (!generationMap) {
+        objects.filter(o => o.type === 'panel').forEach(p => {
+            let gen = 0;
+            if (sunTime > 6 && sunTime < 18) {
+                const peak = (p.watts || 550) / 1000; // kW
+                const factor = Math.sin(((sunTime - 6) / 12) * Math.PI);
+                gen = peak * factor * 0.85;
+            }
+            genMap.set(p.id, gen);
+        });
+    }
+
     const flows = new Map(); // Map<objectId, { activePower: number, gridFlow: number, loadFlow: number, batteryFlow: number, isEnergized: boolean }>
     const adj = new Map();
 
@@ -47,19 +68,56 @@ export function calculateFlows(objects, wires, generationMap = new Map(), batter
     // Helper to get neighbors
     const getNeighbors = (id) => adj.get(id) || [];
 
-    // Helper to check if node is connected to an outage grid
-    const isConnectedToOutageGrid = (nodeId) => {
-        const neighbors = getNeighbors(nodeId);
-        for (const nid of neighbors) {
-            const neighbor = objects.find(o => o.id === nid);
-            if (neighbor && neighbor.type === 'grid') {
+    // Helper to check grid connection status (Deep Search)
+    const findGridConnection = (startNodeId) => {
+        const queue = [startNodeId];
+        const visited = new Set([startNodeId]);
+        let hasOutage = false;
+        let hasHealthy = false;
+
+        while (queue.length > 0) {
+            const currId = queue.shift();
+            const currObj = objects.find(o => o.id === currId);
+            if (!currObj) continue;
+
+            if (currObj.type === 'grid') {
                 // Check for Outage OR Manual Off
-                if (neighbor.isOutage || neighbor.isOn === false) {
-                    return true;
+                if (currObj.isOutage || currObj.isOn === false) {
+                    hasOutage = true;
+                } else {
+                    hasHealthy = true;
+                }
+                if (hasOutage && hasHealthy) return { hasOutage, hasHealthy };
+            }
+
+            // Traverse neighbors
+            const neighbors = getNeighbors(currId);
+            for (const nid of neighbors) {
+                if (visited.has(nid)) continue;
+
+                const neighbor = objects.find(o => o.id === nid);
+                if (!neighbor) continue;
+
+                // Stop at OPEN switches (except the start node itself)
+                let isBlocked = false;
+
+                // Check neighbor switch state
+                if (['vcb', 'acb', 'lt_panel', 'ht_panel', 'acdb'].includes(neighbor.type)) {
+                    if (neighbor.id !== startNodeId && neighbor.isOn === false) isBlocked = true;
+                }
+
+                // Check current node switch state (if not start node)
+                if (currId !== startNodeId && ['vcb', 'acb', 'lt_panel', 'ht_panel', 'acdb'].includes(currObj.type)) {
+                    if (currObj.isOn === false) isBlocked = true;
+                }
+
+                if (!isBlocked) {
+                    visited.add(nid);
+                    queue.push(nid);
                 }
             }
         }
-        return false;
+        return { hasOutage, hasHealthy };
     };
 
     // 2. Find Connected Components (Islands)
@@ -104,7 +162,7 @@ export function calculateFlows(objects, wires, generationMap = new Map(), batter
                 island.totalLoad += loadKw;
             }
             if (currObj.type === 'panel') {
-                island.totalSolar += (generationMap.get(currObj.id) || 0);
+                island.totalSolar += (genMap.get(currObj.id) || 0);
             }
             if (currObj.type === 'battery' || currObj.type === 'bess') {
                 island.batteryIds.push(currObj.id);
@@ -119,7 +177,7 @@ export function calculateFlows(objects, wires, generationMap = new Map(), batter
             let isOpen = false;
             if (isSwitch) {
                 if (currObj.isOn === false) isOpen = true;
-                else if (isConnectedToOutageGrid(currObj.id)) isOpen = true; // Auto-trip on outage
+                else if (findGridConnection(currObj.id).hasOutage) isOpen = true; // Auto-trip on outage
             }
 
             if (isOpen) {
@@ -232,20 +290,27 @@ export function calculateFlows(objects, wires, generationMap = new Map(), batter
             flowData.isEnergized = (island.hasGrid || island.totalSolar > 0 || batteryDischarged > 0);
 
             // SPECIAL CASE: If this node is a VCB connected to an Outage Grid, force it to be de-energized (Tripped visual)
-            if (['vcb', 'acb'].includes(node.type)) {
-                if (isConnectedToOutageGrid(node.id)) {
+            if (['vcb', 'acb', 'ht_panel', 'lt_panel', 'acdb'].includes(node.type)) {
+                const gridStatus = findGridConnection(node.id);
+                if (gridStatus.hasOutage) {
                     flowData.isEnergized = false;
+                    flowData.isTripped = true; // Signal to controller to turn OFF
+                }
+                if (gridStatus.hasHealthy) {
+                    flowData.canReset = true; // Signal to controller to turn ON
                 }
             }
 
             if (node.type === 'net_meter') {
                 if (island.hasGrid) {
                     flowData.gridFlow = gridImport - gridExport;
+                    flowData.netPower = flowData.gridFlow;
                 }
             } else if (node.type === 'gross_meter') {
                 // Gross Meter reads the load that is ACTUALLY flowing through it.
                 // If we have a blackout (servedLoad < totalLoad), it reads less or 0.
                 flowData.loadFlow = servedLoad;
+                flowData.netPower = flowData.loadFlow;
             } else if (node.type === 'battery' || node.type === 'bess') {
                 flowData.batteryFlow = islandBatteryFlows.get(node.id) || 0;
             }
