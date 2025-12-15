@@ -79,6 +79,7 @@ export const useSolarStore = create((set, get) => ({
   clipboard: null,
 
   setSelectionBox: (box) => set({ selectionBox: box }),
+  setClipboard: (data) => set({ clipboard: data }),
 
   // History
   history: [],
@@ -415,6 +416,7 @@ export const useSolarStore = create((set, get) => ({
       boqOverrides: state.boqOverrides,
       latitude: state.latitude,
       longitude: state.longitude,
+      orientation: state.orientation,
     });
     set({
       evaluationData: results,

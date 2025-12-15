@@ -24,6 +24,7 @@ export function runSimulation(objects, wires, params) {
     boqOverrides = {},
     latitude = 28.6,
     longitude = 77.2,
+    orientation = 0,
   } = params;
 
   // Extract equipment from objects
@@ -64,7 +65,7 @@ export function runSimulation(objects, wires, params) {
   const { issues, validations } = validateSystem(objects, wires);
 
   // Calculate yearly shadow loss
-  const shadowLossPct = calculateYearlyShadowLoss(objects, latitude, longitude);
+  const { totalLossPct: shadowLossPct, panelLosses } = calculateYearlyShadowLoss(objects, latitude, longitude, orientation);
   const shadowLossFactor = 1 - shadowLossPct;
 
   // Monthly simulation with seasonality and hourly granularity
@@ -407,7 +408,10 @@ export function runSimulation(objects, wires, params) {
     breakEvenMonth,
     monthlyGenData,
     monthlyLossData,
+    monthlyGenData,
+    monthlyLossData,
     months,
+    panelLosses,
   };
 }
 
@@ -824,99 +828,208 @@ export function validateConnection(fromObj, toObj, wireType) {
 }
 
 /**
- * Calculate yearly shadow loss using Monte Carlo sampling
- * @param {Array} objects
- * @param {number} lat
- * @param {number} lon
- * @returns {number} Shadow loss percentage (0-1)
+ * Calculate yearly shadow loss with detailed per-panel analysis
+ * Uses Monte Carlo sampling and Polygon-based shadow projection
+ * Uses HYBRID logic to match Canvas Visuals (User Orientation)
+ * @returns {Object} { totalLossPct, panelLosses }
  */
-export function calculateYearlyShadowLoss(objects, lat, lon) {
+export function calculateYearlyShadowLoss(objects, lat, lon, orientation = 0) {
   const panels = objects.filter(o => o.type === 'panel');
-  if (panels.length === 0) return 0;
+  if (panels.length === 0) return { totalLossPct: 0, panelLosses: [] };
 
-  let totalPanelArea = 0;
-  let totalShadowArea = 0;
+  // Initialize detailed tracking
+  const panelLossMap = {}; // id -> { shadedSamples, totalSamples }
+  panels.forEach(p => {
+    panelLossMap[p.id] = { shaded: 0, total: 0, label: p.label };
+  });
 
-  // Sample shadow loss across 12 months
-  for (let month = 0; month < 12; month++) {
-    // Use the 15th of each month
-    const date = new Date(new Date().getFullYear(), month, 15);
+  let globalShaded = 0;
+  let globalTotal = 0;
 
-    // Sample at 9am, 12pm, 3pm
-    const times = [9, 12, 15];
-    let monthShadowRatio = 0;
+  // Reduced loop for performance, but good enough for estimates
+  // Check 15th of each month
+  for (let m = 0; m < 12; m++) {
+    const date = new Date();
+    date.setMonth(m, 15);
 
-    // Accumulate shadow area for this month
-    let monthTotalShadow = 0;
-    let monthSamples = 0;
+    // Check hourly from 7am to 5pm (More granular to catch moving shadows)
+    const times = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
     times.forEach(hour => {
-      // Calculate UTC hour for the given solar hour at the location
-      // Solar Time = UTC + (lon / 15)
-      // UTC = Solar Time - (lon / 15)
+      // 1. Calculate Sun Position (Physical) for Altitude/Length
       const utcHour = hour - (lon / 15);
       date.setUTCHours(Math.floor(utcHour), Math.floor((utcHour % 1) * 60), 0, 0);
-
       const sunPos = SunCalc.getPosition(date, lat, lon);
 
       // If sun is below horizon, ignore
       if (sunPos.altitude <= 0) return;
 
-      const shadowLen = 1 / Math.tan(sunPos.altitude);
-      // Cap shadow length to avoid extreme values
-      const cappedLen = Math.min(shadowLen, 10);
+      // 2. Calculate Shadow Vector using VISUAL LOGIC (Matches Canvas)
+      // This ensures simulation assumes the same sun direction as the drawing engine
+      // User Reference: South is "Down" (0 deg), but Orientation rotates the map.
+      // Canvas Formula: ((sunTime - 6) / 12) * Math.PI + (orientation * ...);
+      // Wait, Canvas Formula maps 6am->PI (Left/West), 12pm->PI*1.5 (Top/North?), 6pm->0 (Right/East)?
+      // Let's re-read canvas.js carefully or just use strict hybrid.
 
-      // Calculate shadow vector
-      const dx = -Math.sin(sunPos.azimuth) * cappedLen;
-      const dy = Math.cos(sunPos.azimuth) * cappedLen;
+      // Canvas Logic from `getShadowVector`:
+      // angle = ((sunTime - 6) / 12) * Math.PI + (orientation * Math.PI / 180)
+      // sunTime=6 -> 0 rad + rot.
+      // sunTime=12 -> 0.5 PI + rot.
+
+      const visualAngle = ((hour - 6) / 12) * Math.PI + (orientation * Math.PI / 180);
+
+      const shadowLen = 1 / Math.tan(sunPos.altitude);
+      const cappedLen = Math.min(shadowLen, 30); // Allow longer shadows
+
+      // Canvas `getShadowVector` uses: x: -cos(angle), y: -sin(angle)
+      const dx = -Math.cos(visualAngle) * cappedLen;
+      const dy = -Math.sin(visualAngle) * cappedLen;
+
+      // Pre-calculate vertices for all potential casters to avoid re-calc inside loop
+      const casters = objects.map(obj => {
+        return {
+          id: obj.id,
+          h_z: obj.h_z || 0,
+          vertices: getObjectVertices(obj), // Helper to get real vertices
+          obj: obj
+        };
+      });
 
       panels.forEach(panel => {
-        // Monte Carlo sampling: random points on panel
-        const samples = 5;
-        let shadedPoints = 0;
+        // Monte Carlo sampling
+        const samples = 15; // Increased samples
 
         for (let i = 0; i < samples; i++) {
+          panelLossMap[panel.id].total++;
+          globalTotal++;
+
           const px = panel.x + Math.random() * panel.w;
           const py = panel.y + Math.random() * panel.h;
 
+          // Rotate point if panel is rotated
+          const lx = Math.random() * panel.w - (panel.w / 2);
+          const ly = Math.random() * panel.h - (panel.h / 2);
+          // Rotate
+          const rad = (panel.rotation || 0) * (Math.PI / 180);
+          const rpx = lx * Math.cos(rad) - ly * Math.sin(rad);
+          const rpy = lx * Math.sin(rad) + ly * Math.cos(rad);
+          // Translate
+          const wx = rpx + (panel.x + panel.w / 2);
+          const wy = rpy + (panel.y + panel.h / 2);
+
           // Check if in shadow from any object
           let inShadow = false;
-          for (const obj of objects) {
-            if (obj.id === panel.id) continue;
-            if ((obj.h_z || 0) <= (panel.h_z || 0)) continue; // Only higher objects cast shadow
+          for (const caster of casters) {
+            if (caster.id === panel.id) continue;
+            // Only higher objects cast shadow
+            // Ensure significant height difference (> 0.1m)
+            if (caster.h_z <= (panel.h_z || 0) + 0.05) continue;
 
-            const dh = (obj.h_z || 0) - (panel.h_z || 0);
-            const shadowDx = dx * dh;
-            const shadowDy = dy * dh;
+            const dh = caster.h_z - (panel.h_z || 0);
 
-            const sx = obj.x + shadowDx;
-            const sy = obj.y + shadowDy;
+            // Project Shadow Vertices
+            // Shadow Vertex = Real Vertex + (Vector * HeightDiff)
+            const shadowPoly = caster.vertices.map(v => ({
+              x: v.x + (dx * dh),
+              y: v.y + (dy * dh)
+            }));
 
-            if (px >= sx && px <= sx + obj.w && py >= sy && py <= sy + obj.h) {
+            // Check if point is inside Shadow Polygon
+            if (isPointInPolygon({ x: wx, y: wy }, shadowPoly)) {
               inShadow = true;
               break;
             }
           }
 
-          if (inShadow) shadedPoints++;
+          if (inShadow) {
+            panelLossMap[panel.id].shaded++;
+            globalShaded++;
+          }
         }
-
-        monthTotalShadow += (shadedPoints / samples) * (panel.w * panel.h);
       });
-      monthSamples++;
-    });
-
-    if (monthSamples > 0) {
-      totalShadowArea += monthTotalShadow / monthSamples;
-    }
-
-    panels.forEach(panel => {
-      totalPanelArea += panel.w * panel.h;
     });
   }
 
-  // Average over 12 months (totalPanelArea was added 12 times)
-  return totalPanelArea > 0 ? totalShadowArea / totalPanelArea : 0;
+  // Compile results
+  const panelLosses = panels.map(p => {
+    const stats = panelLossMap[p.id];
+    const lossPct = stats.total > 0 ? stats.shaded / stats.total : 0;
+    return {
+      id: p.id,
+      label: p.label || 'Panel',
+      lossPct: lossPct,
+    };
+  }).sort((a, b) => b.lossPct - a.lossPct); // Highest loss first
+
+  const totalLossPct = globalTotal > 0 ? globalShaded / globalTotal : 0;
+
+  return { totalLossPct, panelLosses };
+}
+
+/**
+ * Get vertices of an object (rotated if needed)
+ * PRIORITIZES Box calculation from x,y,w,h over stored vertices for known shapes
+ * because stored vertices might be stale or relative.
+ */
+function getObjectVertices(obj) {
+  // If we have valid dimensions, prefer constructing from box (matches rendered view)
+  const hasDimensions = typeof obj.w === 'number' && typeof obj.h === 'number' && obj.w > 0 && obj.h > 0;
+
+  // Use explicit vertices ONLY if it's a polygon OR if dimensions are missing
+  if (obj.type === 'polygon' || (!hasDimensions && obj.vertices && obj.vertices.length > 0)) {
+    return obj.vertices;
+  }
+
+  // Calculate from box (Standard for Panel, Structure, Obstacle, Inverter, etc.)
+  const cx = obj.x + obj.w / 2;
+  const cy = obj.y + obj.h / 2;
+  const w = obj.w;
+  const h = obj.h;
+  const rad = (obj.rotation || 0) * (Math.PI / 180);
+
+  // Corners relative to center
+  const corners = [
+    { x: -w / 2, y: -h / 2 },
+    { x: w / 2, y: -h / 2 },
+    { x: w / 2, y: h / 2 },
+    { x: -w / 2, y: h / 2 }
+  ];
+
+  // Rotate and Translate
+  return corners.map(p => ({
+    x: cx + (p.x * Math.cos(rad) - p.y * Math.sin(rad)),
+    y: cy + (p.x * Math.sin(rad) + p.y * Math.cos(rad))
+  }));
+}
+
+/**
+ * Ray-casting algorithm for point in polygon
+ */
+function isPointInPolygon(p, polygon) {
+  let isInside = false;
+  let minX = polygon[0].x, maxX = polygon[0].x;
+  let minY = polygon[0].y, maxY = polygon[0].y;
+
+  for (let i = 1; i < polygon.length; i++) {
+    const q = polygon[i];
+    minX = Math.min(q.x, minX);
+    maxX = Math.max(q.x, maxX);
+    minY = Math.min(q.y, minY);
+    maxY = Math.max(q.y, maxY);
+  }
+
+  if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) {
+    return false;
+  }
+
+  let i = 0, j = polygon.length - 1;
+  for (i, j; i < polygon.length; j = i++) {
+    if ((polygon[i].y > p.y) !== (polygon[j].y > p.y) &&
+      p.x < (polygon[j].x - polygon[i].x) * (p.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x) {
+      isInside = !isInside;
+    }
+  }
+  return isInside;
 }
 
 /**

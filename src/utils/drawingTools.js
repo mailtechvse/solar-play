@@ -103,6 +103,7 @@ export function createRectangle(start, end, type = "structure", height = 3.0) {
     w: width,
     h: depth,
     h_z: height, // Height above ground in meters (structure height)
+    height: height, // Intrinsic height
     relative_h: 0,
     rotation: 0,
     label: props.label,
@@ -137,6 +138,7 @@ export function createPolygon(vertices, type = "structure", height = 3.0) {
     w: bbox.maxX - bbox.minX,
     h: bbox.maxY - bbox.minY,
     h_z: height, // Height of structure in meters
+    height: height, // Intrinsic height
     relative_h: 0,
     rotation: 0,
     label: props.label,
@@ -240,7 +242,7 @@ export function createPanelArray(start, end, baseHeight = 0, panelType = null, o
   // Use provided panel type or default
   const panelW = panelType?.w || 1.134;
   const panelH = panelType?.h || 2.278;
-  const panelWatts = panelType?.watts || 550;
+  const panelWatts = panelType?.watts || panelType?.specifications?.watts || 550;
   const panelCost = panelType?.cost || 15000;
   const panelLabel = panelType?.label || "Panel";
   const gap = 0.05; // 5cm gap between panels
@@ -267,7 +269,7 @@ export function createPanelArray(start, end, baseHeight = 0, panelType = null, o
           y: y,
           w: panelW,
           h: panelH,
-          h_z: baseHeight + 0.1, // Height above base
+          h_z: baseHeight + 0.1, // Height above base (Top Elevation = Base Top + 0.1)
           relative_h: 0.1,
           rotation: 0,
           label: panelLabel,

@@ -783,7 +783,7 @@ const textureCache = new Map();
 /**
  * Draw individual object with proper styling based on type
  */
-function drawObject(ctx, obj, isSelected, scale, offsetX, offsetY, showLabels = true, hoveredObjectId = null) {
+function drawObject(ctx, obj, isSelected, scale, offsetX, offsetY, showLabels = false, hoveredObjectId = null) {
   ctx.save();
 
   const screenX = (obj.x * scale) + offsetX;
@@ -918,12 +918,13 @@ function drawObject(ctx, obj, isSelected, scale, offsetX, offsetY, showLabels = 
 /**
  * Draw object-specific content (labels, icons, specs)
  */
-function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLabels = true, hoveredObjectId = null) {
+function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLabels = false, hoveredObjectId = null) {
   // Constants for screen-space sizes (in pixels)
   const SCREEN_FONT_SIZE = 14;
   const SCREEN_PADDING_X = 8;
   const SCREEN_PADDING_Y = 4;
   const SCREEN_RADIUS = 4;
+
 
   // Calculate screen coordinates for the object center
   // We use these to draw text in screen space for maximum crispness
@@ -931,7 +932,10 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
   const centerY = obj.y + obj.h / 2;
 
   const isHovered = hoveredObjectId === obj.id;
-  const shouldShowLabel = showLabels || isHovered;
+  // Strictly respect toggle: Off means OFF (no hover tooltips)
+  const shouldShowLabel = showLabels === true;
+
+  if (!shouldShowLabel) return;
 
   // Prepare lines of text
   const lines = [];
@@ -951,14 +955,14 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
   let isDigital = false;
   let showBatteryBar = false;
 
-  if (obj.type === "panel" && obj.watts) specText = `${obj.watts}W`;
-  else if (obj.type === "inverter" && obj.capKw) specText = `${obj.capKw}kW`;
+  if (obj.type === "panel" && obj.watts) specText = `${obj.watts} W`;
+  else if (obj.type === "inverter" && obj.capKw) specText = `${obj.capKw} kW`;
   else if (obj.type === "battery" || obj.type === "bess") {
     const cap = obj.capKwh || (obj.specifications?.battery_capacity || 0);
-    specText = `${cap}kWh`;
+    specText = `${cap} kWh`;
     showBatteryBar = true;
   }
-  else if (obj.type === "load" && obj.units) specText = `${obj.units}U`;
+  else if (obj.type === "load" && obj.units) specText = `${obj.units} U`;
   else if (obj.type === "grid") {
     if (obj.isOutage) {
       specText = "OUTAGE";
@@ -987,7 +991,7 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
 
   // Measure Label
   if (lines.length > 0) {
-    ctx.font = `${lines[0].weight} ${lines[0].size}px "Inter", system-ui, -apple-system, sans-serif`;
+    ctx.font = `${lines[0].weight} ${lines[0].size}px "Inter", system - ui, -apple - system, sans - serif`;
     const m = ctx.measureText(lines[0].text);
     maxWidth = Math.max(maxWidth, m.width);
     totalHeight += lines[0].size * 1.2;
@@ -998,7 +1002,7 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
     const size = SCREEN_FONT_SIZE * 0.85;
     const font = isDigital
       ? `700 ${size}px "Courier New", monospace`
-      : `500 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+      : `500 ${size}px "Inter", system - ui, -apple - system, sans - serif`;
     ctx.font = font;
     const m = ctx.measureText(specText);
     maxWidth = Math.max(maxWidth, m.width);
@@ -1039,35 +1043,30 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
   const bgX = screenX - bgWidth / 2;
   const bgY = screenY - bgHeight / 2;
 
-  ctx.fillStyle = "rgba(175, 138, 138, 0.85)"; // Neutral black background
-  ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetY = 3;
-
-  // Rounded Rect
-  ctx.beginPath();
-  ctx.roundRect(bgX, bgY, bgWidth, bgHeight, SCREEN_RADIUS);
-  ctx.fill();
-
-  // Border
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.shadowColor = "transparent";
+  // No Background Pill - switching to Outline Text style as requested
 
   // Draw Content
   let currentY = bgY + SCREEN_PADDING_Y;
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
 
   // 1. Label
   if (lines.length > 0) {
     const line = lines[0];
     ctx.font = `${line.weight} ${line.size}px "Inter", system-ui, -apple-system, sans-serif`;
+
+    // Outline
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.lineWidth = 3;
+    ctx.strokeText(line.text, screenX, currentY);
+
+    // Fill
     ctx.fillStyle = "#ffffff";
     ctx.fillText(line.text, screenX, currentY);
+
     currentY += line.size * 1.2;
   }
 
@@ -1077,8 +1076,16 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
     ctx.font = isDigital
       ? `700 ${size}px "Courier New", monospace`
       : `500 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+
+    // Outline
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.lineWidth = 3;
+    ctx.strokeText(specText, screenX, currentY);
+
+    // Fill
     ctx.fillStyle = specColor;
     ctx.fillText(specText, screenX, currentY);
+
     currentY += size * 1.2;
   }
 
@@ -1105,10 +1112,18 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
     ctx.fill();
 
     // Text %
+    const text = `${soc.toFixed(0)}%`;
+    const textY = barY + barHeight / 2;
     ctx.font = `600 ${barHeight * 0.8}px "Inter", sans-serif`;
-    ctx.fillStyle = "#ffffff";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${soc.toFixed(0)}%`, screenX, barY + barHeight / 2);
+
+    // Outline
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.lineWidth = 2; // Thinner for small text
+    ctx.strokeText(text, screenX, textY);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(text, screenX, textY);
   }
 
   ctx.restore();
@@ -1625,7 +1640,7 @@ function drawMeasurement(ctx, start, end) {
   ctx.textBaseline = "bottom";
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2;
-  ctx.fillText(`${distance.toFixed(2)}m`, midX, midY - 0.1);
+  ctx.fillText(`${distance.toFixed(2)} m`, midX, midY - 0.1);
 
   ctx.restore();
 }
@@ -1754,7 +1769,7 @@ function drawInProgressDrawing(ctx, mode, points, preview) {
     // Draw dimensions
     ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
     ctx.font = "bold 0.3px 'Inter', system-ui, sans-serif";
-    ctx.fillText(`${width.toFixed(1)}m x ${height.toFixed(1)}m`, minX + 0.2, minY - 0.1);
+    ctx.fillText(`${width.toFixed(1)}m x ${height.toFixed(1)} m`, minX + 0.2, minY - 0.1);
   } else if (mode === "polygon" || mode === "freehand") {
     // Draw path points
     for (let i = 0; i < points.length; i++) {

@@ -177,8 +177,8 @@ export const handleCanvasEvents = {
             if (other.id === obj.id) return false;
             if (allSelectedIds.includes(other.id)) return false; // Already selected
 
-            // Must be higher or equal (on top)
-            if ((other.h_z || 0) < (obj.h_z || 0)) return false;
+            // Removed Z-height check to allow 2D visual containment to drive dragging
+            // if ((other.h_z || 0) < (obj.h_z || 0)) return false;
 
             // Intersection Area Check (More robust than center point)
             const overlapW = Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x));
@@ -186,13 +186,33 @@ export const handleCanvasEvents = {
             const overlapArea = overlapW * overlapH;
             const otherArea = other.w * other.h;
 
-            // If overlap covers > 30% of the child, drag it along
-            return overlapArea > (otherArea * 0.3);
+            // Size Check: Passenger (other) cannot be bigger than Driver (obj)
+            // This prevents a small Panel (Top) from dragging a large Roof (Bottom)
+            if (otherArea > (obj.w * obj.h)) return false;
+
+            // Containment Check: Passenger must be mostly inside the Overlap
+            // Threshold 0.9 means 90% of the child must be covered by the parent
+            return overlapArea > (otherArea * 0.9);
           });
 
-          this._dragChildrenIds = children.map(c => c.id);
-          children.forEach(c => {
-            this._dragStartPositions[c.id] = { x: c.x, y: c.y };
+          // Add children to the selection so they visually highlight and move logically
+          const childIds = children.map(c => c.id);
+          const newSelection = [...new Set([...groupPeers, ...childIds])];
+          useSolarStore.setState({ additionalSelectedIds: newSelection });
+
+          // Legacy: still track them for internal drag logic if needed, but selection handles most now
+          this._dragChildrenIds = childIds;
+
+          // No need to store separate dragStartPositions for children here, 
+          // as the "allSelectedIds" block below will now catch them since we updated proper state!
+
+          // RE-Calculate allSelectedIds with the new additions
+          const finalSelectedIds = [updatedStore.selectedObjectId, ...newSelection].filter(Boolean);
+
+          this._dragStartPositions = {};
+          finalSelectedIds.forEach(id => {
+            const o = store.objects.find(obj => obj.id === id); // Use base store to get latest before drag params
+            if (o) this._dragStartPositions[id] = { x: o.x, y: o.y };
           });
 
           this._dragStartObjPos = { x: obj.x, y: obj.y }; // Keep for legacy/primary alignment
@@ -278,7 +298,17 @@ export const handleCanvasEvents = {
           newObject.capKwh = equipment.specifications?.capacity_kwh || 5;
           newObject.relative_h = 0; // Floor
         } else if (objType === "panel") {
-          newObject.watts = equipment.specifications?.watts || 550;
+          // Explicitly grab watts from the preset, ensuring we capture the 720W or similar values
+          // Clean parser to handle standard numbers or strings
+          const rawWatts = equipment.watts || (equipment.specifications && equipment.specifications.watts) || 550;
+          const panelWatts = parseFloat(rawWatts);
+
+          newObject.watts = panelWatts;
+          // Sync to specifications for consistency
+          newObject.specifications = {
+            ...newObject.specifications,
+            watts: panelWatts
+          };
           newObject.relative_h = 0.1; // Surface
         } else if (objType === "vcb") {
           newObject.specifications = { voltage_rating: 11, current_rating: 630 };
@@ -829,7 +859,7 @@ export const handleCanvasEvents = {
           const panelType = {
             w: equipment.width || equipment.specifications?.width || 1.134,
             h: equipment.height || equipment.specifications?.height || 2.278,
-            watts: equipment.specifications?.watts || 550,
+            watts: equipment.watts || equipment.specifications?.watts || 550,
             cost: parseFloat(equipment.cost) || 15000,
             label: equipment.name || "Panel"
           };
@@ -867,7 +897,7 @@ export const handleCanvasEvents = {
             label: equipment.name,
             equipment_id: equipment.id,
             specifications: equipment.specifications || {},
-            watts: equipment.specifications?.watts || 550,
+            watts: equipment.watts || equipment.specifications?.watts || 550,
           };
           store.addObject(newObject);
           store.saveState();
@@ -948,14 +978,53 @@ export const handleCanvasEvents = {
       return;
     }
 
-    // Copy/Paste (Basic implementation)
+    // Copy (Ctrl+C)
     if ((e.ctrlKey || e.metaKey) && e.key === "c") {
-      if (store.selectedObjectId) {
-        const obj = store.objects.find(o => o.id === store.selectedObjectId);
-        if (obj) {
-          // Store in local clipboard or store
-          // For now just console log, full clipboard needs store support
-          console.log("Copying", obj);
+      const selectedIds = [store.selectedObjectId, ...(store.additionalSelectedIds || [])].filter(Boolean);
+
+      if (selectedIds.length > 0) {
+        const objectsToCopy = store.objects.filter(o => selectedIds.includes(o.id));
+        if (objectsToCopy.length > 0) {
+          // Deep copy to clipboard to avoid reference issues
+          store.setClipboard(JSON.parse(JSON.stringify(objectsToCopy)));
+          store.showToast(`Copied ${objectsToCopy.length} object(s)`, "info");
+        }
+      }
+      return;
+    }
+
+    // Paste (Ctrl+V)
+    if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      if (store.clipboard && store.clipboard.length > 0) {
+        const pastedObjects = [];
+        const newIds = [];
+
+        // Calculate offset (e.g. 1 meter or 20px)
+        // We'll use 1.0 meter offset
+        const offset = 1.0;
+
+        store.clipboard.forEach(item => {
+          const newId = crypto.randomUUID();
+          newIds.push(newId);
+
+          const newObj = {
+            ...item,
+            id: newId,
+            x: item.x + offset,
+            y: item.y + offset,
+            groupId: undefined // Ungroup pasted items for now to avoid ID conflicts
+          };
+
+          store.addObject(newObj);
+          pastedObjects.push(newObj);
+        });
+
+        // Select the newly pasted objects
+        if (newIds.length > 0) {
+          store.setSelectedObject(newIds[0]);
+          store.setAdditionalSelectedIds(newIds.slice(1));
+          store.saveState();
+          store.showToast(`Pasted ${newIds.length} object(s)`, "success");
         }
       }
       return;
@@ -1013,6 +1082,34 @@ export const handleCanvasEvents = {
       case "l":
         store.setMode("wire_dc");
         break;
+    }
+
+    // Keyboard Movement (Arrow Keys)
+    if (e.key.startsWith("Arrow") && (store.selectedObjectId || (store.additionalSelectedIds && store.additionalSelectedIds.length > 0))) {
+      e.preventDefault();
+      const step = e.shiftKey ? 1.0 : 0.05; // 5cm fine, 1m coarse
+      let dx = 0;
+      let dy = 0;
+
+      switch (e.key) {
+        case "ArrowUp": dy = -step; break;
+        case "ArrowDown": dy = step; break;
+        case "ArrowLeft": dx = -step; break;
+        case "ArrowRight": dx = step; break;
+      }
+
+      const selectedIds = [store.selectedObjectId, ...(store.additionalSelectedIds || [])].filter(Boolean);
+
+      selectedIds.forEach(id => {
+        const obj = store.objects.find(o => o.id === id);
+        if (obj) {
+          store.updateObject(id, {
+            x: obj.x + dx,
+            y: obj.y + dy
+          });
+        }
+      });
+      return;
     }
   },
 
@@ -1214,14 +1311,10 @@ function adjustObjectLayering(store, objectId, movingIds = []) {
   let parent = null;
   let maxHz = -1;
 
-  // console.log(`[Layering] Checking ${obj.label || obj.id} (${obj.type}) at z=${obj.h_z?.toFixed(2)}`);
-
   for (const other of objects) {
     if (other.id === obj.id) continue;
 
-    // If the other object is also moving, prevent cyclic stacking.
-    // Rule: An object can only sit on a moving peer if it is ALREADY visually above it.
-    // This prevents a base object from jumping on top of its own child.
+    // Prevent cyclic stacking
     if (movingIds.includes(other.id)) {
       if ((obj.h_z || 0) <= (other.h_z || 0)) continue;
     }
@@ -1229,15 +1322,12 @@ function adjustObjectLayering(store, objectId, movingIds = []) {
     // Only consider structures as parents
     if (other.type !== 'structure' && other.type !== 'tinshed' && other.type !== 'polygon') continue;
 
-    // Check overlap (Area Intersection)
+    // Check overlap
     const overlapW = Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x));
     const overlapH = Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y));
     const overlapArea = overlapW * overlapH;
     const objArea = obj.w * obj.h;
 
-    // console.log(`  vs ${other.label || other.id}: Overlap=${overlapArea.toFixed(2)} / Threshold=${(objArea * 0.01).toFixed(2)}`);
-
-    // Use overlap check (stick to parent if > 1% overlap)
     if (overlapArea > (objArea * 0.01)) {
       if ((other.h_z || 0) > maxHz) {
         maxHz = other.h_z || 0;
@@ -1246,30 +1336,37 @@ function adjustObjectLayering(store, objectId, movingIds = []) {
     }
   }
 
+  // Determine intrinsic height of the object (e.g. structure height)
+  let myHeight = obj.height;
+  if (myHeight === undefined) {
+    // Fallback for objects that don't have height property yet
+    if (obj.type === 'structure' || obj.type === 'tinshed' || obj.type === 'polygon') {
+      myHeight = 3.0;
+    } else {
+      myHeight = 0;
+    }
+  }
+
+  // Determine spacing/offset (e.g. panel on hook)
+  const offset = obj.relative_h !== undefined ? obj.relative_h : (obj.type === 'panel' ? 0.1 : 0);
+
+  let newHz;
   if (parent) {
-    // console.log(`  -> New Parent: ${parent.label || parent.id} (h_z: ${parent.h_z}, height: ${parent.height})`);
+    // Stack on top of parent (Parent Top + My Height + Offset)
+    // parent.h_z represents the top elevation of the parent
+    newHz = (parent.h_z || 0) + myHeight + offset;
 
-    // Calculate new Height Z (Hz) relative to parent's top surface
-    // Structures/Tinsheds have a Z-height (thickness). Other objects are treated as flat surfaces unless specified.
-    // Default structure height is 3m if not defined.
-    const parentZHeight = (parent.type === 'structure' || parent.type === 'tinshed')
-      ? (parent.height !== undefined ? parent.height : 3)
-      : (parent.height || 0);
-
-    const newHz = parent.h_z + parentZHeight + (obj.relative_h || 0.1);
-
-    // If height changed, update it
-    if (Math.abs(obj.h_z - newHz) > 0.001) {
-      console.log(`[Layering] Updating ${obj.label || obj.id}: z ${obj.h_z?.toFixed(2)} -> ${newHz.toFixed(2)} (Parent: ${parent.label})`);
-      store.updateObject(obj.id, { h_z: newHz });
-    }
+    // If we are stacking a structure (offset 0) on another, newHz = ParentTop + 3.0.
+    // If we are stacking a panel (myHeight 0) on structure, newHz = ParentTop + 0.1.
   } else {
-    // On ground - reset to relative height
-    const newHz = obj.relative_h || 0.1;
-    if (Math.abs(obj.h_z - newHz) > 0.001) {
-      console.log(`[Layering] Dropping ${obj.label || obj.id} to ground: z ${obj.h_z?.toFixed(2)} -> ${newHz.toFixed(2)}`);
-      store.updateObject(obj.id, { h_z: newHz });
-    }
+    // On ground
+    newHz = myHeight + offset;
+  }
+
+  // If height changed, update it
+  if (Math.abs((obj.h_z || 0) - newHz) > 0.001) {
+    // console.log(`[Layering] Updating ${obj.label || obj.id}: z ${obj.h_z?.toFixed(2)} -> ${newHz.toFixed(2)}`);
+    store.updateObject(obj.id, { h_z: newHz });
   }
 }
 

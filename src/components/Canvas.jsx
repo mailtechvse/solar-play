@@ -15,6 +15,7 @@ export default function Canvas() {
   const offsetX = useSolarStore((state) => state.offsetX);
   const offsetY = useSolarStore((state) => state.offsetY);
   const showGrid = useSolarStore((state) => state.showGrid);
+  const showLabels = useSolarStore((state) => state.showLabels);
   const objects = useSolarStore((state) => state.objects);
   const wires = useSolarStore((state) => state.wires);
   const selectedObjectId = useSolarStore((state) => state.selectedObjectId);
@@ -144,6 +145,7 @@ export default function Canvas() {
       offsetX,
       offsetY,
       showGrid,
+      showLabels,
       objects,
       wires,
       selectedObjectId,
@@ -204,6 +206,7 @@ export default function Canvas() {
     offsetX,
     offsetY,
     showGrid,
+    showLabels,
     objects,
     wires,
     selectedObjectId,

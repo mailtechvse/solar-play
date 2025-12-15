@@ -672,6 +672,51 @@ export default function EvaluationModal() {
             </div>
           )}
 
+          {/* Detailed Shadow Loss Analysis */}
+          {evaluationData.panelLosses && evaluationData.panelLosses.length > 0 && (
+            <div className="bg-gray-700 p-4 rounded overflow-x-auto">
+              <h3 className="text-white font-bold mb-3 flex items-center gap-2">
+                <i className="fas fa-cloud-sun text-yellow-400"></i> Per-Panel Shadow Analysis
+              </h3>
+              <p className="text-xs text-gray-400 mb-2">
+                Detailed shadow report simulating micro-inverter level monitoring.
+                Shows estimated annual energy loss due to shading from nearby structures.
+              </p>
+              <div className="max-h-60 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-600 sticky top-0 bg-gray-700">
+                      <th className="text-left py-2 px-2 text-gray-300">Panel ID/Label</th>
+                      <th className="text-right py-2 px-2 text-gray-300">Shadow Loss</th>
+                      <th className="text-right py-2 px-2 text-gray-300">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {evaluationData.panelLosses.map((p) => (
+                      <tr key={p.id} className="border-b border-gray-600 hover:bg-gray-600">
+                        <td className="py-2 px-2 text-white font-mono">{p.label} <span className="text-gray-500 text-[10px] ml-1">({p.id.slice(-4)})</span></td>
+                        <td className="text-right py-2 px-2">
+                          <span className={`${p.lossPct > 0.05 ? 'text-red-400 font-bold' : 'text-green-400'}`}>
+                            {(p.lossPct * 100).toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="text-right py-2 px-2">
+                          {p.lossPct > 0.20 ? (
+                            <span className="text-red-500 font-bold"><i className="fas fa-exclamation-circle"></i> Critical</span>
+                          ) : p.lossPct > 0.05 ? (
+                            <span className="text-yellow-500"><i className="fas fa-exclamation-triangle"></i> Warning</span>
+                          ) : (
+                            <span className="text-green-500"><i className="fas fa-check-circle"></i> Good</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Charts */}
           {evaluationData.monthlyData?.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
