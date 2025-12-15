@@ -475,52 +475,109 @@ export default function RightPanel() {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="text-gray-500 font-medium">Object Height (Relative)</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={selectedObject.relative_h || 0.1}
-                    onChange={(e) => {
-                      let newRelH = parseFloat(e.target.value);
-                      if (newRelH < 0) newRelH = 0; // Prevent negative height
-                      const oldRelH = selectedObject.relative_h || 0.1;
-                      const baseH = (selectedObject.h_z || 0) - oldRelH;
-                      updateObject(selectedObject.id, {
-                        relative_h: newRelH,
-                        h_z: baseH + newRelH
-                      });
-                    }}
-                    className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right"
-                  />
-                  <span className="text-xs text-gray-500">m</span>
+            {/* Height Controls - Simplified & Smart */}
+            {(() => {
+              // 1. Detect Base Logic
+              const overlapThreshold = 0.1; // 10% overlap
+              const myArea = selectedObject.w * selectedObject.h;
+
+              const potentialBases = objects
+                .filter(o => {
+                  if (o.id === selectedObject.id) return false;
+                  const overlapW = Math.max(0, Math.min(selectedObject.x + selectedObject.w, o.x + o.w) - Math.max(selectedObject.x, o.x));
+                  const overlapH = Math.max(0, Math.min(selectedObject.y + selectedObject.h, o.y + o.h) - Math.max(selectedObject.y, o.y));
+                  return (overlapW * overlapH) > (myArea * overlapThreshold);
+                })
+                .sort((a, b) => (b.h_z || 0) - (a.h_z || 0));
+
+              const baseObj = potentialBases.length > 0 ? potentialBases[0] : null;
+              const baseHeight = baseObj ? (baseObj.h_z || 0) : 0;
+              const isGroundObject = baseHeight === 0;
+              const isStructure = ['structure', 'tinshed', 'polygon'].includes(selectedObject.type);
+
+              return (
+                <div>
+                  {/* Scenario A: Top Object (Child) - Control Relative Height Only */}
+                  {!isGroundObject && (
+                    <div className="bg-blue-50 p-2 rounded border border-blue-100 mb-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-blue-800 font-bold text-xs">Relative Height (Above Base)</label>
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={selectedObject.relative_h || 0}
+                            onChange={(e) => {
+                              const newRel = parseFloat(e.target.value);
+                              if (newRel < 0 || isNaN(newRel)) return;
+
+                              // Simple: h_z = Base + newRel + (Intrinsic if structure?)
+                              // Usually for panels, relative_h IS the gap.
+                              // h_z = Base + Intrinsic + Relative.
+                              // Wait, existing logic: h_z = Base + Intrinsic + relative_h.
+
+                              let intrinsic = selectedObject.height || 0;
+                              if (isStructure && !selectedObject.height) intrinsic = 3.0; // Default fallback
+
+                              updateObject(selectedObject.id, {
+                                relative_h: newRel,
+                                h_z: baseHeight + intrinsic + newRel
+                              });
+                            }}
+                            className="w-16 px-1 py-0.5 text-xs border border-blue-200 rounded text-right font-bold text-blue-700 bg-white"
+                          />
+                          <span className="text-xs text-blue-500">m</span>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-blue-400 mt-1 flex justify-between">
+                        <span>On top of: {baseObj.label || baseObj.type}</span>
+                        <span>(Abs: {selectedObject.h_z?.toFixed(2)}m)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Scenario B: Ground Object - Control Absolute Height Only */}
+                  {isGroundObject && (
+                    <div className="bg-gray-50 p-2 rounded border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <label className="text-gray-600 font-bold text-xs">Absolute Height (Ground)</label>
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={selectedObject.h_z || 0}
+                            onChange={(e) => {
+                              const newHz = parseFloat(e.target.value);
+                              if (newHz < 0 || isNaN(newHz)) return;
+
+                              // If Structure: Change Intrinsic Height, Rel=0
+                              // If Panel: Change Rel Height (Mounting), Intrinsic=0
+                              if (isStructure) {
+                                updateObject(selectedObject.id, {
+                                  h_z: newHz,
+                                  height: newHz,
+                                  relative_h: 0
+                                });
+                              } else {
+                                updateObject(selectedObject.id, {
+                                  h_z: newHz,
+                                  relative_h: newHz
+                                });
+                              }
+                            }}
+                            className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right font-bold text-gray-700 bg-white"
+                          />
+                          <span className="text-xs text-gray-500">m</span>
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-gray-400 mt-1">Height from ground level.</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="5"
-                step="0.1"
-                value={selectedObject.relative_h || 0.1}
-                onChange={(e) => {
-                  const newRelH = parseFloat(e.target.value);
-                  const oldRelH = selectedObject.relative_h || 0.1;
-                  const baseH = (selectedObject.h_z || 0) - oldRelH;
-                  updateObject(selectedObject.id, {
-                    relative_h: newRelH,
-                    h_z: baseH + newRelH
-                  });
-                }}
-                className="w-full mt-2 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <div className="flex items-center justify-between mt-1">
-                <label className="text-gray-400 text-xs">Absolute Height (Ground)</label>
-                <span className="text-xs text-gray-700 font-bold">{selectedObject.h_z?.toFixed(2) || "0.00"}m</span>
-              </div>
-            </div>
+              );
+            })()}
 
             <div>
               <label className="text-gray-500 font-medium">Rotation (°)</label>

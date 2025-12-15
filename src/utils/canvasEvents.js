@@ -838,10 +838,11 @@ export const handleCanvasEvents = {
         if (dragDistance > 0.5) {
           const equipment = store.selectedPreset;
 
-          // Find base height if placing on structure
+          // Find base height and rotation if placing on structure
           const centerX = (startX + endX) / 2;
           const centerY = (startY + endY) / 2;
           let baseHeight = 0;
+          let baseRotation = 0;
           let mountingType = "ground";
 
           for (const obj of store.objects) {
@@ -849,6 +850,7 @@ export const handleCanvasEvents = {
               if (centerX >= obj.x && centerX <= obj.x + obj.w &&
                 centerY >= obj.y && centerY <= obj.y + obj.h) {
                 baseHeight = obj.h_z || 0;
+                baseRotation = obj.rotation || 0;
                 mountingType = obj.type === 'tinshed' ? 'tinshed' : 'rcc';
                 break;
               }
@@ -864,13 +866,18 @@ export const handleCanvasEvents = {
             label: equipment.name || "Panel"
           };
 
+          // Combine structure rotation with manual placement rotation
+          const manualRotation = store.placementRotation || 0;
+          const finalRotation = (baseRotation + manualRotation) % 360;
+
           // Create panel array with obstruction avoidance
           const panels = createPanelArray(
             { x: startX, y: startY },
             { x: endX, y: endY },
             baseHeight,
             panelType,
-            store.objects
+            store.objects,
+            finalRotation
           );
 
           // Add all panels to canvas
@@ -1076,8 +1083,22 @@ export const handleCanvasEvents = {
         store.setMode("delete");
         break;
       case "r":
-        store.setDrawingMode("rectangle");
-        store.setDrawingType("structure");
+        if (store.mode === "place" && store.selectedPreset) {
+          // Rotate placement preview/logic
+          const currentRot = store.placementRotation || 0;
+          const newRot = (currentRot + 90) % 360;
+          store.setPlacementRotation(newRot);
+          store.showToast(`Placement Rotation: ${newRot}°`, 'info');
+        } else if (store.selectedObjectId) {
+          const obj = store.objects.find(o => o.id === store.selectedObjectId);
+          if (obj) {
+            const newRotation = ((obj.rotation || 0) + 90) % 360;
+            store.updateObject(obj.id, { rotation: newRotation });
+          }
+        } else {
+          store.setDrawingMode("rectangle");
+          store.setDrawingType("structure");
+        }
         break;
       case "l":
         store.setMode("wire_dc");

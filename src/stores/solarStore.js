@@ -209,9 +209,46 @@ export const useSolarStore = create((set, get) => ({
 
   updateObject: (id, updates) =>
     set((state) => {
-      const newObjects = state.objects.map((obj) =>
-        obj.id === id ? { ...obj, ...updates } : obj
-      );
+      const oldObj = state.objects.find(o => o.id === id);
+      const dependentUpdates = new Map();
+
+      // Vertical Propagation: If height (h_z) changes, move items "on top"
+      if (oldObj && typeof updates.h_z === 'number' && Math.abs(updates.h_z - (oldObj.h_z || 0)) > 0.001) {
+        const delta = updates.h_z - (oldObj.h_z || 0);
+        const driver = { ...oldObj, ...updates };
+
+        state.objects.forEach(other => {
+          if (other.id === id) return;
+
+          // 1. Must be physically above or at same level as the driver's OLD height
+          const otherHz = other.h_z || 0;
+          if (otherHz < (oldObj.h_z || 0) - 0.1) return; // Allow small tolerance
+
+          // 2. 2D Overlap Check
+          const driverW = driver.w;
+          const driverH = driver.h;
+          const otherW = other.w;
+          const otherH = other.h;
+
+          const overlapW = Math.max(0, Math.min(driver.x + driverW, other.x + otherW) - Math.max(driver.x, other.x));
+          const overlapH = Math.max(0, Math.min(driver.y + driverH, other.y + otherH) - Math.max(driver.y, other.y));
+          const overlapArea = overlapW * overlapH;
+          const otherArea = otherW * otherH;
+
+          // 3. Containment: Passenger must be >50% inside the Driver
+          // And Driver must be larger than Passenger (optional, but good for "Base" logic)
+          if (overlapArea > otherArea * 0.5) {
+            dependentUpdates.set(other.id, { h_z: otherHz + delta });
+          }
+        });
+      }
+
+      const newObjects = state.objects.map((obj) => {
+        if (obj.id === id) return { ...obj, ...updates };
+        if (dependentUpdates.has(obj.id)) return { ...obj, ...dependentUpdates.get(obj.id) };
+        return obj;
+      });
+
       const flows = calculateFlows(newObjects, state.wires, { sunTime: state.sunTime });
       const finalObjects = newObjects.map(obj => {
         const flow = flows.get(obj.id);
