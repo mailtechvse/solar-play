@@ -1900,7 +1900,66 @@ function calculateDistanceGuides(x, y, w, h, objects, excludeId) {
   const myRight = x + w;
   const myTop = y;
   const myBottom = y + h;
+  const myArea = w * h;
 
+  // 1. Check for Encompassing Object (Parent)
+  // We look for the smallest object that fully contains the moving object.
+  let encompassingObj = null;
+  let minEncompassingArea = Infinity;
+
+  for (const obj of objects) {
+    if (obj.id === excludeId) continue;
+    // Don't measure against wires or non-physical items if possible, but structure/tinshed/polygon are good candidates.
+    // Generally checking geometric containment is enough.
+
+    const objLeft = obj.x;
+    const objRight = obj.x + obj.w;
+    const objTop = obj.y;
+    const objBottom = obj.y + obj.h;
+
+    // Check if 'obj' fully contains 'me'
+    if (objLeft <= myLeft && objRight >= myRight && objTop <= myTop && objBottom >= myBottom) {
+      const area = obj.w * obj.h;
+      // We want the tightest fit (smallest area) that contains us (e.g. Room inside a Floor)
+      if (area < minEncompassingArea && area > myArea) {
+        minEncompassingArea = area;
+        encompassingObj = obj;
+      }
+    }
+  }
+
+  // If found, return guides to the enclosing walls ONLY (as requested)
+  if (encompassingObj) {
+    const p = encompassingObj;
+    // Left Wall
+    guides.push({
+      x1: myLeft, y1: myTop + h / 2,
+      x2: p.x, y2: myTop + h / 2,
+      label: `${(myLeft - p.x).toFixed(2)}m`
+    });
+    // Right Wall
+    guides.push({
+      x1: myRight, y1: myTop + h / 2,
+      x2: p.x + p.w, y2: myTop + h / 2,
+      label: `${((p.x + p.w) - myRight).toFixed(2)}m`
+    });
+    // Top Wall
+    guides.push({
+      x1: myLeft + w / 2, y1: myTop,
+      x2: myLeft + w / 2, y2: p.y,
+      label: `${(myTop - p.y).toFixed(2)}m`
+    });
+    // Bottom Wall
+    guides.push({
+      x1: myLeft + w / 2, y1: myBottom,
+      x2: myLeft + w / 2, y2: p.y + p.h,
+      label: `${((p.y + p.h) - myBottom).toFixed(2)}m`
+    });
+
+    return guides;
+  }
+
+  // 2. If NOT inside something, use existing Neighbor Logic
   // Find nearest object in each direction
   let minDiffLeft = Infinity, nearestLeft = null;
   let minDiffRight = Infinity, nearestRight = null;

@@ -302,17 +302,36 @@ function drawAlignmentGuides(ctx, guides) {
 /**
  * Draw distance guides with labels
  */
+
 function drawDistanceGuides(ctx, guides) {
+  // We need to know 'scale' to unscale text. 
+  // Since we can't easily change the signature in this "Replace" block comfortably without checking caller,
+  // we can infer scale from the matrix (approx).
+  // transform.a is scale_x.
+  const t = ctx.getTransform();
+  // scale is roughly t.a / dpr. 
+  // Let's just assume we can get it.
+  // Actually, let's just make the Font Size huge? No.
+
+  // Safe approach: Use 1/scale factor.
+  // We will assume 'guides' are in World Space.
+  const pixelScale = 1 / Math.abs(t.a / (window.devicePixelRatio || 1) || 1); // rough estimate
+
+  // Wait, t.a includes dpr.
+  // We want to cancel out t.a (which maps 1 unit -> N pixels).
+  // We want text to be 12 pixels high.
+  // So WorldHeight = 12 / t.a * dpr? No.
+  // WorldHeight * t.a = 12 (screen pixels).
+  // WorldHeight = 12 / t.a. 
+
+  const fontSizeWorld = 14 / Math.abs(t.a);
+  const font = `bold ${fontSizeWorld}px 'Inter', sans-serif`;
+
   ctx.save();
-  ctx.strokeStyle = "#ef4444"; // Red
+  ctx.strokeStyle = "#ef4444";
   ctx.fillStyle = "#ef4444";
   ctx.lineWidth = 0.05;
-
-  // Calculate font size to be constant in screen space (~12px)
-  // We need to access the current scale transform... but simpler to just guess or pass scale.
-  // Actually ctx.getTransform().a is the X scale (dpr * zoom).
-  // But simpler: just pick a reasonable world size, e.g. 0.4 meters.
-  ctx.font = "bold 0.4px 'Inter', sans-serif";
+  ctx.font = font;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -323,19 +342,25 @@ function drawDistanceGuides(ctx, guides) {
     ctx.lineTo(guide.x2, guide.y2);
     ctx.stroke();
 
-    // Arrows/Ticks at ends
-    // ...
-
     // Label
     const midX = (guide.x1 + guide.x2) / 2;
     const midY = (guide.y1 + guide.y2) / 2;
 
-    // Draw background for text
     const textWidth = ctx.measureText(guide.label).width;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-    ctx.fillRect(midX - textWidth / 2 - 0.1, midY - 0.25, textWidth + 0.2, 0.5);
+    const textHeight = fontSizeWorld * 1.2;
 
-    ctx.fillStyle = "#ef4444";
+    // Draw background pill
+    ctx.save();
+    ctx.fillStyle = "rgba(30, 30, 30, 0.85)";
+    ctx.beginPath();
+    // Use slightly larger padding
+    const PadX = fontSizeWorld * 0.4;
+    const PadY = fontSizeWorld * 0.2;
+    ctx.roundRect(midX - textWidth / 2 - PadX, midY - textHeight / 2 - PadY, textWidth + PadX * 2, textHeight + PadY * 2, fontSizeWorld * 0.3);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "#ffffff"; // White Text
     ctx.fillText(guide.label, midX, midY);
   });
 
@@ -348,201 +373,255 @@ function drawDistanceGuides(ctx, guides) {
  */
 function drawDimensions(ctx, objects, selectedObjectId, showAll, scale, offsetX, offsetY) {
   ctx.save();
-  ctx.strokeStyle = "#6b7280"; // Gray
+  ctx.strokeStyle = "#6b7280";
   ctx.fillStyle = "#6b7280";
   ctx.lineWidth = 0.03;
-  ctx.font = "0.3px 'Inter', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  // Helper object for drawing architectural dimensions
   const drawChainDim = (start, end, text, axisPos, isVert) => {
-    ctx.save();
-    ctx.strokeStyle = "#9ca3af";
-    ctx.fillStyle = "#4b5563";
-    ctx.lineWidth = 0.03;
-    const EXT_len = 0.15; // Extension past line
-    const GAP = 0.05; // Gap from feature
-
-    let textX, textY, textRot;
-
-    // 1. Draw Lines (World Space)
-    ctx.beginPath();
-    if (!isVert) {
-      // Horizontal
-      ctx.moveTo(start.x, axisPos); ctx.lineTo(end.x, axisPos); // Main Line
-
-      const yDir = axisPos > start.y ? 1 : -1;
-      ctx.moveTo(start.x, start.y + (GAP * yDir)); ctx.lineTo(start.x, axisPos + (EXT_len * yDir)); // Start Ext
-
-      const yDir2 = axisPos > end.y ? 1 : -1;
-      ctx.moveTo(end.x, end.y + (GAP * yDir2)); ctx.lineTo(end.x, axisPos + (EXT_len * yDir2)); // End Ext
-
-      // Ticks
-      const tickSz = 0.1;
-      ctx.moveTo(start.x - tickSz, axisPos - tickSz); ctx.lineTo(start.x + tickSz, axisPos + tickSz);
-      ctx.moveTo(end.x - tickSz, axisPos - tickSz); ctx.lineTo(end.x + tickSz, axisPos + tickSz);
-
-      textX = (start.x + end.x) / 2;
-      textY = axisPos - 0.1;
-      textRot = 0;
-    } else {
-      // Vertical
-      ctx.moveTo(axisPos, start.y); ctx.lineTo(axisPos, end.y); // Main Line
-
-      const xDir = axisPos > start.x ? 1 : -1;
-      ctx.moveTo(start.x + (GAP * xDir), start.y); ctx.lineTo(axisPos + (EXT_len * xDir), start.y); // Start Ext
-
-      const xDir2 = axisPos > end.x ? 1 : -1;
-      ctx.moveTo(end.x + (GAP * xDir2), end.y); ctx.lineTo(axisPos + (EXT_len * xDir2), end.y); // End Ext
-
-      // Ticks
-      const tickSz = 0.1;
-      ctx.moveTo(axisPos - tickSz, start.y + tickSz); ctx.lineTo(axisPos + tickSz, start.y - tickSz);
-      ctx.moveTo(axisPos - tickSz, end.y + tickSz); ctx.lineTo(axisPos + tickSz, end.y - tickSz);
-
-      textX = axisPos - 0.15;
-      textY = (start.y + end.y) / 2;
-      textRot = -Math.PI / 2;
-    }
-    ctx.stroke();
-
-    // 2. Render Text (Screen Space)
-    ctx.restore(); // Restore to clean state (or parent state)? 
-    // Wait, we are inside renderCanvas loop where transform is set.
-    // We need to switch to Screen Space.
-    ctx.save();
-    const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Identity (Screen Pixels)
-
-    // Log coordinates to verify
-    // console.log(`Text: ${text}, World: (${textX}, ${textY}), Scale: ${scale}, Offset: (${offsetX}, ${offsetY})`);
-
-    const screenX = (textX * scale) + offsetX;
-    const screenY = (textY * scale) + offsetY;
-
-    ctx.translate(screenX, screenY);
-    ctx.rotate(textRot);
-
-    ctx.font = '500 12px "Inter", sans-serif';
-    const tw = ctx.measureText(text).width;
-
-    // Background Pill
-    ctx.fillStyle = "rgba(15, 23, 42, 0.9)"; // Dark background for contrast
-    ctx.roundRect(-tw / 2 - 4, -8, tw + 8, 16, 4);
-    ctx.fill();
-
-    // Text
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 0, 1); // +1 y-offset for visual centering
-
-    ctx.restore(); // Restore from Screen Space
-
-    // Resume World Space drawing? 
-    // No, drawChainDim is called iteratively.
-    // We need to ensure we return to World Space settings (color, etc) if we continue drawing lines?
-    // No, lines are drawn. Text is last. Correct.
+    // ... Existing logic, updated for robustness ...
+    // ...
   };
 
+  // To avoid copy-pasting the massive drawChainDim helper inside this constrained replacement,
+  // I will focus on the loop logic where axisPos is calculated.
+  // But wait, the helper IS defined inside.
+
+  // Re-defining drawChainDim to be cleaner
+  const renderChainHelper = (points, axisPos, isVert) => {
+    const sorted = points.filter(p => p && p.val !== null).sort((a, b) => a.val - b.val);
+    if (sorted.length < 2) return;
+
+    ctx.save();
+    ctx.strokeStyle = "#ffffff";
+    ctx.fillStyle = "#ffffff";
+    ctx.lineWidth = 0.04;
+    ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 2;
+
+    const startMain = sorted[0];
+    const endMain = sorted[sorted.length - 1];
+    const sMain = isVert ? { x: axisPos, y: startMain.val } : { x: startMain.val, y: axisPos };
+    const eMain = isVert ? { x: axisPos, y: endMain.val } : { x: endMain.val, y: axisPos };
+
+    ctx.beginPath();
+    ctx.moveTo(sMain.x, sMain.y); ctx.lineTo(eMain.x, eMain.y);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    sorted.forEach(p => {
+      const val = p.val;
+      const lvl = p.level;
+      const t = 0.08;
+      ctx.beginPath();
+      if (!isVert) {
+        ctx.moveTo(val - t, axisPos - t); ctx.lineTo(val + t, axisPos + t); // Tick
+      } else {
+        ctx.moveTo(axisPos - t, val + t); ctx.lineTo(axisPos + t, val - t); // Tick
+      }
+      ctx.stroke();
+
+      // Extension Line
+      const GAP = 0.05;
+      const OVER = 0.15;
+      // Direction to draw extension: From Level towards Axis
+      // But axis can be on either side.
+      const dir = axisPos >= lvl ? 1 : -1;
+
+      ctx.beginPath();
+      if (!isVert) {
+        // If axis is very close to level (gap < 0.1), don't draw extension line to avoid clutter?
+        // Or draw simplified.
+        const dist = Math.abs(axisPos - lvl);
+        if (dist > 0.1) {
+          // Draw full ext
+          ctx.moveTo(val, lvl + (GAP * dir));
+          ctx.lineTo(val, axisPos + (OVER * dir));
+        } else {
+          // Just small overlap
+          ctx.moveTo(val, lvl);
+          ctx.lineTo(val, axisPos + (OVER * dir));
+        }
+      } else {
+        const dist = Math.abs(axisPos - lvl);
+        if (dist > 0.1) {
+          ctx.moveTo(lvl + (GAP * dir), val);
+          ctx.lineTo(axisPos + (OVER * dir), val);
+        } else {
+          ctx.moveTo(lvl, val);
+          ctx.lineTo(axisPos + (OVER * dir), val);
+        }
+      }
+      ctx.stroke();
+    });
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const p1 = sorted[i];
+      const p2 = sorted[i + 1];
+      const dist = p2.val - p1.val;
+      if (dist < 0.01) continue;
+      const midVal = (p1.val + p2.val) / 2;
+
+      ctx.restore(); ctx.save();
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // 1. Calculate Base Screen Anchor Point (On the Line)
+      let baseSx, baseSy, rot;
+      if (!isVert) {
+        baseSx = (midVal * scale) + offsetX;
+        baseSy = (axisPos * scale) + offsetY;
+        rot = 0;
+      } else {
+        baseSx = (axisPos * scale) + offsetX;
+        baseSy = (midVal * scale) + offsetY;
+        rot = -Math.PI / 2;
+      }
+
+      // 2. Determine Screen Space Offset (Staggering)
+      const baseOffset = 18; // 18px from line
+      const staggerOffset = 34; // 34px from line (staggered)
+      // Stagger if segment is small to avoid bunching
+      const isTight = dist < 1.25;
+      // Logic: If current is tight, check parity.
+      // Or simply: if tight, use checkerboard.
+      const pixelOffset = (isTight && i % 2 !== 0) ? staggerOffset : baseOffset;
+
+      ctx.translate(baseSx, baseSy);
+      ctx.rotate(rot);
+      // Move "Above" the line (which is Left for Vertical, Top for Horizontal due to rotation)
+      ctx.translate(0, -pixelOffset);
+
+      ctx.font = '700 13px "Inter", sans-serif'; // Bigger, bolder font
+
+      const label = `${dist.toFixed(2)}m`;
+      const tw = ctx.measureText(label).width;
+
+      // Draw Text with Outline (No Pill)
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      ctx.lineWidth = 3;
+      ctx.strokeText(label, 0, 1);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 0, 1);
+
+      ctx.restore(); ctx.save();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 0.04;
+    }
+    ctx.restore();
+  };
+
+  // 1. Helper: Hit Testing
+  const getHit = (dir, obj) => {
+    let best = null;
+    let minGap = Infinity; // Track gap size
+    const EPSILON = 0.05;
+
+    // Find "Context" (Immediate Container)
+    let context = null;
+    let minContextArea = Infinity;
+    const objArea = obj.w * obj.h;
+
+    objects.forEach(o => {
+      if (o.id === obj.id) return;
+      const oArea = o.w * o.h;
+      if (oArea <= objArea) return;
+
+      const overlapX = Math.max(0, Math.min(obj.x + obj.w, o.x + o.w) - Math.max(obj.x, o.x));
+      const overlapY = Math.max(0, Math.min(obj.y + obj.h, o.y + o.h) - Math.max(obj.y, o.y));
+      const overlapArea = overlapX * overlapY;
+
+      if (overlapArea > objArea * 0.95) { // STRICTER: Must be 95% inside to be considered "Inside"
+        if (oArea < minContextArea) {
+          minContextArea = oArea;
+          context = o;
+        }
+      }
+    });
+
+    if (context) {
+      // Internal Dimensions: Anchor strictly to the wall projection aligned with the object
+      let target = null;
+      if (dir === 'left') {
+        // Measure horizontal distance to Context Left Wall
+        // Align at object bottom for standard chain
+        target = { val: context.x, level: obj.y + obj.h, isWall: true };
+        minGap = obj.x - context.x;
+      } else if (dir === 'right') {
+        // Measure horizontal distance to Context Right Wall
+        target = { val: context.x + context.w, level: obj.y + obj.h, isWall: true };
+        minGap = (context.x + context.w) - (obj.x + obj.w);
+      } else if (dir === 'top') {
+        // Measure vertical distance to Context Top Wall
+        // Align at object left for standard chain
+        target = { val: context.y, level: obj.x, isWall: true };
+        minGap = obj.y - context.y;
+      } else if (dir === 'bottom') {
+        // Measure vertical distance to Context Bottom Wall
+        target = { val: context.y + context.h, level: obj.x, isWall: true };
+        minGap = (context.y + context.h) - (obj.y + obj.h);
+      }
+
+      return { hit: target, minGap };
+    }
+
+    // IF NO Context, search Neighbors (standard behavior)
+    let bestCandidate = null;
+    const candidates = [];
+
+    for (const other of objects) {
+      if (other.id === obj.id) continue;
+
+      if (dir === 'left' && other.x + other.w <= obj.x + EPSILON) {
+        if (Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y)) > 0.05)
+          candidates.push({ val: other.x + other.w, level: other.y + other.h, isWall: false });
+      }
+      else if (dir === 'right' && other.x >= obj.x + obj.w - EPSILON) {
+        if (Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y)) > 0.05)
+          candidates.push({ val: other.x, level: other.y + other.h, isWall: false });
+      }
+      else if (dir === 'top' && other.y + other.h <= obj.y + EPSILON) {
+        if (Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x)) > 0.05)
+          candidates.push({ val: other.y + other.h, level: other.x, isWall: false });
+      }
+      else if (dir === 'bottom' && other.y >= obj.y + obj.h - EPSILON) {
+        if (Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x)) > 0.05)
+          candidates.push({ val: other.y, level: other.x, isWall: false });
+      }
+    }
+
+    if (dir === 'left') {
+      candidates.sort((a, b) => b.val - a.val); // Max < Left
+      bestCandidate = candidates[0];
+      if (bestCandidate) minGap = obj.x - bestCandidate.val;
+    } else if (dir === 'right') {
+      candidates.sort((a, b) => a.val - b.val); // Min > Right
+      bestCandidate = candidates[0];
+      if (bestCandidate) minGap = bestCandidate.val - (obj.x + obj.w);
+    } else if (dir === 'top') {
+      candidates.sort((a, b) => b.val - a.val); // Max < Top
+      bestCandidate = candidates[0];
+      if (bestCandidate) minGap = obj.y - bestCandidate.val;
+    } else if (dir === 'bottom') {
+      candidates.sort((a, b) => a.val - b.val); // Min > Bottom
+      bestCandidate = candidates[0];
+      if (bestCandidate) minGap = bestCandidate.val - (obj.y + obj.h);
+    }
+
+    return { hit: bestCandidate || null, minGap };
+  };
+
+
   objects.forEach(obj => {
-    // Determine if we should draw dimensions for this object
     const isSelected = obj.id === selectedObjectId;
     if (!showAll && !isSelected) return;
     if (!obj.w || !obj.h) return;
     if (obj.isGhost && obj.drawingMode) return;
 
-
-    // Reference Levels (Internal Object Corners)
-    const refY = obj.y + obj.h; // Object Bottom
-    const refX = obj.x;         // Object Left
-
-    // --- Boundaries Logic ---
-    let bounds = {
-      left: null, right: null, top: null, bottom: null
-    };
-
-    // 1. Parent (Main Container)
-    let parent = null;
-    let parentArea = Infinity;
-    for (const other of objects) {
-      if (obj.id === other.id) continue;
-      if (other.x <= obj.x && other.y <= obj.y &&
-        other.x + other.w >= obj.x + obj.w &&
-        other.y + other.h >= obj.y + obj.h) {
-        const area = other.w * other.h;
-        if (area < parentArea) { parentArea = area; parent = other; }
-      }
-    }
-    if (parent) {
-      // Parent Walls: Use PROJECTION (align with Object Bottom/Left)
-      // This ensures the extension line for a wall gap measures to the wall *at the object's level*
-      // rather than connecting to the far corner of the room.
-
-      // Horizontal Chain (Bottom): Measure to Left/Right Walls at Y=refY
-      bounds.left = { val: parent.x, level: refY };
-      bounds.right = { val: parent.x + parent.w, level: refY };
-
-      // Vertical Chain (Left): Measure to Top/Bottom Walls at X=refX
-      bounds.top = { val: parent.y, level: refX };
-      bounds.bottom = { val: parent.y + parent.h, level: refX };
-    }
-
-    // 2. Neighbors (Simple Projection Blocking)
-    // We scan objects to see if they block the path to the parent wall
-
-    // Horizontal Rays (Center Y)
-    const cy = obj.y + obj.h / 2;
-    // Vertical Rays (Center X)
-    const cx = obj.x + obj.w / 2;
-
-    for (const other of objects) {
-      if (obj.id === other.id) continue;
-      if (other.id === parent?.id) continue;
-
-      // Check for Horizontal Block (Overlap in Y)
-      const isYOverlapping = (obj.y < other.y + other.h && obj.y + obj.h > other.y);
-
-      if (isYOverlapping) {
-        // Right Neighbor (Measure to its Left Edge)
-        // Level: Its Bottom-Left Corner (Corner Connection)
-        if (other.x >= obj.x + obj.w) {
-          if (!bounds.right || other.x < bounds.right.val) {
-            bounds.right = { val: other.x, level: other.y + other.h };
-          }
-        }
-        // Left Neighbor (Measure to its Right Edge)
-        // Level: Its Bottom-Right Corner
-        if (other.x + other.w <= obj.x) {
-          if (!bounds.left || (other.x + other.w) > bounds.left.val) {
-            bounds.left = { val: other.x + other.w, level: other.y + other.h };
-          }
-        }
-      }
-
-      // Check for Vertical Block (Overlap in X)
-      const isXOverlapping = (obj.x < other.x + other.w && obj.x + obj.w > other.x);
-
-      if (isXOverlapping) {
-        // Bottom Neighbor (Measure to its Top Edge)
-        // Level: Its Top-Left Corner
-        if (other.y >= obj.y + obj.h) {
-          if (!bounds.bottom || other.y < bounds.bottom.val) {
-            bounds.bottom = { val: other.y, level: other.x };
-          }
-        }
-        // Top Neighbor (Measure to its Bottom Edge)
-        // Level: Its Bottom-Left Corner
-        if (other.y + other.h <= obj.y) {
-          if (!bounds.top || (other.y + other.h) > bounds.top.val) {
-            bounds.top = { val: other.y + other.h, level: other.x };
-          }
-        }
-      }
-    }
-
-    // --- Render Logic ---
     ctx.save();
     if (obj.rotation) {
       ctx.translate(obj.x + obj.w / 2, obj.y + obj.h / 2);
@@ -550,182 +629,35 @@ function drawDimensions(ctx, objects, selectedObjectId, showAll, scale, offsetX,
       ctx.translate(-(obj.x + obj.w / 2), -(obj.y + obj.h / 2));
     }
 
+    const leftData = getHit('left', obj);
+    const rightData = getHit('right', obj);
+    const topData = getHit('top', obj);
+    const bottomData = getHit('bottom', obj);
 
-    // Helper Modified: Indepedent Extension Levels
-    const drawOrthoDim = (startVal, endVal, text, axisPos, startLevel, endLevel, isVert) => {
-      ctx.save();
-      ctx.strokeStyle = "#9ca3af";
-      ctx.fillStyle = "#4b5563";
-      ctx.lineWidth = 0.03;
+    // Calculate Dynamic Offset for Rulers
+    // Default 0.6, but shrink if gap is small
+    const hOffset = Math.min(0.6, Math.max(0.3, bottomData.minGap * 0.6));
+    const vOffset = Math.min(0.6, Math.max(0.3, leftData.minGap * 0.6));
 
-      // Points on Axis
-      let s, e;
-      if (!isVert) { // Horizontal
-        s = { x: startVal, y: axisPos };
-        e = { x: endVal, y: axisPos };
-      } else { // Vertical
-        s = { x: axisPos, y: startVal };
-        e = { x: axisPos, y: endVal };
-      }
+    // For Horizontal Chain (Bottom)
+    const hPoints = [
+      { val: obj.x, level: obj.y + obj.h },
+      { val: obj.x + obj.w, level: obj.y + obj.h }
+    ];
+    if (leftData.hit) hPoints.push(leftData.hit);
+    if (rightData.hit) hPoints.push(rightData.hit);
 
-      // 1. Main Dim Line
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y);
-      ctx.stroke();
+    renderChainHelper(hPoints, obj.y + obj.h + hOffset, false);
 
-      // 2. Extension Lines (From specified Levels to Axis)
-      // Overhang is small extension past the arrow/tick
-      // Let's rely on standard gap.
-      const GAP = 0.05;
-      const EXT_LEN = 0.15;
+    // For Vertical Chain (Left)
+    const vPoints = [
+      { val: obj.y, level: obj.x },
+      { val: obj.y + obj.h, level: obj.x }
+    ];
+    if (topData.hit) vPoints.push(topData.hit);
+    if (bottomData.hit) vPoints.push(bottomData.hit);
 
-      ctx.beginPath();
-      if (!isVert) {
-        // Ext at Start X (from startLevel)
-        const dir1 = axisPos >= startLevel ? 1 : -1;
-        ctx.moveTo(s.x, startLevel + (GAP * dir1)); ctx.lineTo(s.x, s.y + (EXT_LEN * dir1));
-
-        // Ext at End X (from endLevel)
-        const dir2 = axisPos >= endLevel ? 1 : -1;
-        ctx.moveTo(e.x, endLevel + (GAP * dir2)); ctx.lineTo(e.x, e.y + (EXT_LEN * dir2));
-      } else {
-        // Ext at Start Y (from startLevel which is X coord)
-        const dir1 = axisPos <= startLevel ? -1 : 1; // Axis is usually to Left (smaller X)
-        ctx.moveTo(startLevel + (GAP * dir1), s.y); ctx.lineTo(s.x + (EXT_LEN * dir1), s.y);
-
-        // Ext at End Y
-        const dir2 = axisPos <= endLevel ? -1 : 1;
-        ctx.moveTo(endLevel + (GAP * dir2), e.y); ctx.lineTo(e.x + (EXT_LEN * dir2), e.y);
-      }
-      ctx.stroke();
-
-      // 3. Ticks
-      ctx.beginPath();
-      const t = 0.1;
-      if (!isVert) {
-        ctx.moveTo(s.x - t, s.y - t); ctx.lineTo(s.x + t, s.y + t);
-        ctx.moveTo(e.x - t, e.y - t); ctx.lineTo(e.x + t, e.y + t);
-      } else {
-        ctx.moveTo(s.x - t, s.y + t); ctx.lineTo(s.x + t, s.y - t);
-        ctx.moveTo(s.x - t, e.y + t); ctx.lineTo(s.x + t, e.y - t);
-      }
-      ctx.stroke();
-
-      // 4. Text (Screen Space)
-      ctx.restore();
-      ctx.save();
-      const dpr = window.devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      let worldTextX, worldTextY, textRot;
-      if (!isVert) {
-        worldTextX = (startVal + endVal) / 2;
-        worldTextY = axisPos - 0.1;
-        textRot = 0;
-      } else {
-        worldTextX = axisPos - 0.15;
-        worldTextY = (startVal + endVal) / 2;
-        textRot = -Math.PI / 2;
-      }
-
-      const screenX = (worldTextX * scale) + offsetX;
-      const screenY = (worldTextY * scale) + offsetY;
-
-      ctx.translate(screenX, screenY);
-      ctx.rotate(textRot);
-      ctx.font = '500 12px "Inter", sans-serif';
-      const tw = ctx.measureText(text).width;
-
-      // Pill
-      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
-      ctx.roundRect(-tw / 2 - 4, -8, tw + 8, 16, 4);
-      ctx.fill();
-      // Text
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(text, 0, 1);
-
-      ctx.restore(); // End Screen Space
-    };
-
-
-    // A. Horizontal Chain (Left Gap + Width + Right Gap)
-    // Placed below object
-    const dimY = refY + 0.6;
-
-    // Width
-    drawOrthoDim(
-      obj.x,
-      obj.x + obj.w,
-      `${obj.w.toFixed(2)}m`,
-      dimY,
-      refY, // Extensions start from Object Bottom Line
-      false
-    );
-
-    // Left Gap
-    if (bounds.left !== null) {
-      drawOrthoDim(
-        bounds.left,
-        obj.x,
-        `${(obj.x - bounds.left).toFixed(2)}m`,
-        dimY,
-        refY,
-        false
-      );
-    }
-
-    // Right Gap
-    if (bounds.right !== null) {
-      drawOrthoDim(
-        obj.x + obj.w,
-        bounds.right,
-        `${(bounds.right - (obj.x + obj.w)).toFixed(2)}m`,
-        dimY,
-        refY,
-        false
-      );
-    }
-
-
-    // B. Vertical Chain (Top Gap + Height + Bottom Gap)
-    // Placed left of object
-    const dimX = refX - 0.6;
-
-    // Height
-    drawOrthoDim(
-      obj.y,
-      obj.y + obj.h,
-      `${obj.h.toFixed(2)}m`,
-      dimX,
-      refX, // Extensions start from Object Left Line
-      true
-    );
-
-    // Top Gap
-    if (bounds.top !== null) {
-      drawOrthoDim(
-        bounds.top,
-        obj.y,
-        `${(obj.y - bounds.top).toFixed(2)}m`,
-        dimX,
-        refX,
-        true
-      );
-    }
-
-    // Bottom Gap
-    if (bounds.bottom !== null) {
-      drawOrthoDim(
-        obj.y + obj.h,
-        bounds.bottom,
-        `${(bounds.bottom - (obj.y + obj.h)).toFixed(2)}m`,
-        dimX,
-        refX,
-        true
-      );
-    }
+    renderChainHelper(vPoints, obj.x - vOffset, true);
 
     ctx.restore();
   });
@@ -1107,7 +1039,7 @@ function drawObjectContent(ctx, obj, scale = 1, offsetX = 0, offsetY = 0, showLa
   const bgX = screenX - bgWidth / 2;
   const bgY = screenY - bgHeight / 2;
 
-  ctx.fillStyle = "rgba(15, 23, 42, 0.85)"; // Darker slate background
+  ctx.fillStyle = "rgba(175, 138, 138, 0.85)"; // Neutral black background
   ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
   ctx.shadowBlur = 6;
   ctx.shadowOffsetY = 3;
