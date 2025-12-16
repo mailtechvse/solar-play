@@ -216,24 +216,28 @@ export const specSheetService = {
 // Project management queries
 export const projectService = {
   // Save project to Supabase
-  async saveProject(projectName, projectData) {
+  async saveProject(projectName, projectData, customerId = null) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) throw new Error("User not authenticated");
 
+    const payload = {
+      user_id: user.id,
+      name: projectName,
+      canvas_data: projectData,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (customerId) {
+      payload.customer_id = customerId;
+    }
+
     const { data, error } = await supabase
       .from("projects")
-      .insert([
-        {
-          user_id: user.id,
-          name: projectName,
-          canvas_data: projectData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ])
+      .insert([payload])
       .select()
       .single();
 
@@ -269,20 +273,22 @@ export const projectService = {
     return data;
   },
 
-  // List user's projects
-  async listUserProjects(limit = 50) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) throw new Error("User not authenticated");
-
-    const { data, error } = await supabase
+  // List projects for a specific customer (or user's if no customer provided, though customer-centric is preferred)
+  async listCustomerProjects(customerId) {
+    let query = supabase
       .from("projects")
-      .select("id, name, created_at, updated_at")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false })
-      .limit(limit);
+      .select("id, name, created_at, updated_at, customer_id");
+
+    if (customerId) {
+      query = query.eq("customer_id", customerId);
+    } else {
+      // Fallback: List projects where I am the owner (legacy behavior)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) query = query.eq("user_id", user.id);
+    }
+
+    const { data, error } = await query
+      .order("updated_at", { ascending: false });
 
     if (error) throw error;
     return data;
@@ -299,20 +305,18 @@ export const projectService = {
   },
 
   // Search projects by name
-  async searchProjects(searchTerm) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) throw new Error("User not authenticated");
-
-    const { data, error } = supabase
+  async searchProjects(searchTerm, customerId = null) {
+    let query = supabase
       .from("projects")
       .select("id, name, created_at, updated_at")
-      .eq("user_id", user.id)
       .ilike("name", `%${searchTerm}%`)
       .order("updated_at", { ascending: false });
 
+    if (customerId) {
+      query = query.eq("customer_id", customerId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data;
   },

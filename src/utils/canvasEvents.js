@@ -670,18 +670,27 @@ export const handleCanvasEvents = {
       // Find objects in selection box
       if (store.selectionBox) {
         const { x, y, w, h } = store.selectionBox;
-        // Simple AABB check
+
+        // INTERSECTION Check (User-friendly)
+        // Check if object overlaps with selection box
         const selected = store.objects.filter(obj =>
-          obj.x >= x && obj.x + obj.w <= x + w &&
-          obj.y >= y && obj.y + obj.h <= y + h
+          obj.x < x + w && obj.x + obj.w > x &&
+          obj.y < y + h && obj.y + obj.h > y
         );
 
         if (selected.length > 0) {
           store.setSelectedObject(selected[0].id);
           if (selected.length > 1) {
             const additionalIds = selected.slice(1).map(o => o.id);
-            store.setAdditionalSelectedIds(additionalIds);
+            // Use setState directly to be safe if setter is missing
+            useSolarStore.setState({ additionalSelectedIds: additionalIds });
+          } else {
+            useSolarStore.setState({ additionalSelectedIds: [] });
           }
+        } else {
+          // Clear selection if nothing found
+          store.setSelectedObject(null);
+          useSolarStore.setState({ additionalSelectedIds: [] });
         }
       }
 
@@ -881,10 +890,9 @@ export const handleCanvasEvents = {
           );
 
           // Add all panels to canvas
-          panels.forEach(panel => {
-            panel.mountingType = mountingType;
-            store.addObject(panel);
-          });
+          // Add all panels to canvas efficiently
+          const panelsToAdd = panels.map(panel => ({ ...panel, mountingType }));
+          store.addObjects(panelsToAdd);
           store.saveState();
           store.setDrawingPoints([]); // Clear preview
         } else {
@@ -1089,15 +1097,27 @@ export const handleCanvasEvents = {
           const newRot = (currentRot + 90) % 360;
           store.setPlacementRotation(newRot);
           store.showToast(`Placement Rotation: ${newRot}°`, 'info');
-        } else if (store.selectedObjectId) {
-          const obj = store.objects.find(o => o.id === store.selectedObjectId);
-          if (obj) {
-            const newRotation = ((obj.rotation || 0) + 90) % 360;
-            store.updateObject(obj.id, { rotation: newRotation });
-          }
         } else {
-          store.setDrawingMode("rectangle");
-          store.setDrawingType("structure");
+          // Rotate Selection (Group or Single)
+          const selectedIds = [
+            store.selectedObjectId,
+            ...(store.additionalSelectedIds || [])
+          ].filter(Boolean);
+
+          if (selectedIds.length > 0) {
+            selectedIds.forEach(id => {
+              const obj = store.objects.find(o => o.id === id);
+              if (obj) {
+                const newRotation = ((obj.rotation || 0) + 90) % 360;
+                store.updateObject(obj.id, { rotation: newRotation });
+              }
+            });
+            store.showToast(`Rotated ${selectedIds.length} objects`, 'info');
+          } else {
+            // Determine drawing mode if nothing selected
+            store.setDrawingMode("rectangle");
+            store.setDrawingType("structure");
+          }
         }
         break;
       case "l":

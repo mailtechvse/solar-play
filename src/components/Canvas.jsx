@@ -176,21 +176,6 @@ export default function Canvas() {
 
     const handleKeyDown = (e) => {
       // Handle global shortcuts here or delegate
-      if (e.key === 'r' || e.key === 'R') {
-        const store = useSolarStore.getState();
-        // 1. Rotate Placement Preview
-        const currentRot = store.placementRotation || 0;
-        store.setPlacementRotation((currentRot + 90) % 360);
-
-        // 2. Rotate Selected Object(s)
-        if (store.selectedObjectId) {
-          const obj = store.objects.find(o => o.id === store.selectedObjectId);
-          if (obj) {
-            store.updateObject(obj.id, { rotation: ((obj.rotation || 0) + 90) % 360 });
-          }
-        }
-      }
-
       if (handleCanvasEvents.onKeyDown) {
         handleCanvasEvents.onKeyDown(e);
       }

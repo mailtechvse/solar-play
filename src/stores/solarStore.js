@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { runSimulation } from "../utils/simulation";
+import { runSimulation, calculateSystemMetrics } from "../utils/simulation";
 import { projectService } from "../lib/supabase";
 import { calculateFlows } from "../utils/powerFlow";
 
@@ -130,8 +130,57 @@ export const useSolarStore = create((set, get) => ({
     geminiApiKey: "",
     zoom: 20,
     mapImage: null,
-    mapImage: null,
     mapOverlayActive: false,
+  },
+
+  // Clean up duplicate mapImage key from previous state if present
+  // mapImage: null, (removed)
+
+  // Customer Management
+  activeCustomerId: null,
+  activeCustomer: null,
+  customers: [],
+  isLoadingCustomers: false,
+
+  setActiveCustomer: (customer) => set({
+    activeCustomerId: customer ? customer.id : null,
+    activeCustomer: customer,
+    // When switching customer, clear current project or load default?
+    // For now, let's just clear the project to avoid confusion
+    objects: [],
+    wires: [],
+    currentProjectId: null
+  }),
+
+  setCustomers: (customers) => set({ customers }),
+
+  fetchCustomers: async () => {
+    try {
+      set({ isLoadingCustomers: true });
+      // Use operationsService provided by Supabase lib (imported above)
+      // We need to dynamic import or use standard import.
+      // Assuming operationsService is exported from '../lib/supabase' - YES it is.
+      const { operationsService } = await import("../lib/supabase");
+      // However, typical user might only see THEIR customers.
+      // operationsService.getCustomers currently does simple select *. RLS will filter it.
+      // But we might need 'getCustomerUsers' approach if RLS isn't perfect or if we want logic.
+      // Let's rely on operationsService.getCustomers() respecting RLS.
+      const data = await operationsService.getCustomers();
+
+      set({ customers: data, isLoadingCustomers: false });
+
+      // Select first customer if none selected
+      const state = get();
+      if (!state.activeCustomerId && data.length > 0) {
+        set({ activeCustomerId: data[0].id, activeCustomer: data[0] });
+        // Automatically load this customer's project
+        state.loadCustomerProject(data[0].id);
+      }
+      return data;
+    } catch (e) {
+      console.error("Failed to fetch customers", e);
+      set({ isLoadingCustomers: false });
+    }
   },
 
   // Toast Notification
@@ -198,13 +247,69 @@ export const useSolarStore = create((set, get) => ({
   // Object management
   addObject: (object) =>
     set((state) => {
-      const newObjects = [...state.objects, object];
+      // 1. Calculate height (h_z) based on underlying objects
+      let baseZ = 0;
+      const obj = object;
+
+      // Simple Overlap Check
+      state.objects.forEach(other => {
+        const overlapW = Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x));
+        const overlapH = Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y));
+        const overlapArea = overlapW * overlapH;
+
+        if (overlapArea > (obj.w * obj.h) * 0.1) { // 10% overlap sufficient for base detection
+          const top = (other.h_z || 0);
+          if (top > baseZ) baseZ = top;
+        }
+      });
+
+      const h_z = baseZ + (obj.relative_h || 0);
+      const newObject = { ...obj, h_z };
+
+      const newObjects = [...state.objects, newObject];
       const flows = calculateFlows(newObjects, state.wires, { sunTime: state.sunTime });
+
+      // Update Metrics (DC Capacity etc)
+      const metrics = calculateSystemMetrics(newObjects);
+      const newEvaluationData = state.evaluationData ? { ...state.evaluationData, ...metrics } : metrics;
+
       const finalObjects = newObjects.map(obj => {
         const flow = flows.get(obj.id);
         return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
       });
-      return { objects: finalObjects };
+      return { objects: finalObjects, evaluationData: newEvaluationData };
+    }),
+
+  addObjects: (objectsToAdd) =>
+    set((state) => {
+      // Batch processing
+      const processedObjects = objectsToAdd.map(obj => {
+        let baseZ = 0;
+        state.objects.forEach(other => {
+          // Overlap with EXISTING objects (not newly added ones in this batch - simpler)
+          const overlapW = Math.max(0, Math.min(obj.x + obj.w, other.x + other.w) - Math.max(obj.x, other.x));
+          const overlapH = Math.max(0, Math.min(obj.y + obj.h, other.y + other.h) - Math.max(obj.y, other.y));
+          if ((overlapW * overlapH) > (obj.w * obj.h) * 0.1) {
+            const top = (other.h_z || 0);
+            if (top > baseZ) baseZ = top;
+          }
+        });
+        const h_z = baseZ + (obj.relative_h || 0);
+        return { ...obj, h_z };
+      });
+
+      const newObjects = [...state.objects, ...processedObjects];
+      const flows = calculateFlows(newObjects, state.wires, { sunTime: state.sunTime });
+
+      const metrics = calculateSystemMetrics(newObjects);
+      const newEvaluationData = state.evaluationData ? { ...state.evaluationData, ...metrics } : metrics;
+
+      const finalObjects = newObjects.map(obj => {
+        const flow = flows.get(obj.id);
+        return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
+      });
+
+      return { objects: finalObjects, evaluationData: newEvaluationData };
     }),
 
   updateObject: (id, updates) =>
@@ -264,11 +369,15 @@ export const useSolarStore = create((set, get) => ({
         (wire) => wire.from !== id && wire.to !== id
       );
       const flows = calculateFlows(newObjects, newWires, { sunTime: state.sunTime });
+
+      const metrics = calculateSystemMetrics(newObjects);
+      const newEvaluationData = state.evaluationData ? { ...state.evaluationData, ...metrics } : metrics;
+
       const finalObjects = newObjects.map(obj => {
         const flow = flows.get(obj.id);
         return flow ? { ...obj, isEnergized: flow.isEnergized, isTripped: flow.isTripped, canReset: flow.canReset } : obj;
       });
-      return { objects: finalObjects, wires: newWires };
+      return { objects: finalObjects, wires: newWires, evaluationData: newEvaluationData };
     }),
 
   addWire: (wire) =>
@@ -487,7 +596,9 @@ export const useSolarStore = create((set, get) => ({
         },
       };
 
-      const result = await projectService.saveProject(projectName, projectData);
+      // Pass active customer ID
+      const activeCustomerId = state.activeCustomerId;
+      const result = await projectService.saveProject(projectName, projectData, activeCustomerId);
       set({ currentProjectId: result.id, isLoadingProjects: false });
       return result;
     } catch (error) {
@@ -522,7 +633,45 @@ export const useSolarStore = create((set, get) => ({
     }
   },
 
-  // Load project from Supabase
+  // Load Customer Project (Find most recent or specific)
+  loadCustomerProject: async (customerId) => {
+    try {
+      set({ isLoadingProjects: true });
+
+      // 1. Try to fetch projects from Supabase for this customer
+      const projects = await projectService.listCustomerProjects(customerId);
+      set({ projects });
+
+      // 2. If projects exist, load the most recent one
+      if (projects.length > 0) {
+        const mostRecent = projects[0]; // Ordered by updated_at desc
+        const fullProject = await projectService.loadProject(mostRecent.id);
+        const state = get();
+
+        // Reuse load logic
+        state.loadFromSupabase(fullProject.id);
+        state.showToast(`Loaded existing customer project: ${mostRecent.name}`, "success");
+        return;
+      }
+
+      // 3. Fallback: Load from LocalStorage for this customer if no cloud project exists
+      const saved = localStorage.getItem(`solar_project_autosave_${customerId}`);
+      if (saved) {
+        const projectData = JSON.parse(saved);
+        const state = get();
+        state.loadProject(projectData);
+        set({ isLoadingProjects: false });
+        state.showToast("Restored from local autosave", "info");
+        return;
+      }
+
+      // 4. Reset if nothing found
+      set({ objects: [], wires: [], currentProjectId: null, isLoadingProjects: false });
+    } catch (e) {
+      console.error(e);
+      set({ isLoadingProjects: false });
+    }
+  },
   loadFromSupabase: async (projectId) => {
     try {
       set({ isLoadingProjects: true });
@@ -547,11 +696,13 @@ export const useSolarStore = create((set, get) => ({
     }
   },
 
-  // List user's projects
+  // List projects
   loadProjectsList: async () => {
     try {
       set({ isLoadingProjects: true });
-      const projects = await projectService.listUserProjects();
+      const state = get();
+      // List projects for active customer
+      const projects = await projectService.listCustomerProjects(state.activeCustomerId);
       set({ projects, isLoadingProjects: false });
       return projects;
     } catch (error) {

@@ -13,6 +13,27 @@ import { SunCalc } from "./suncalc";
  * @param {Object} params - Simulation parameters
  * @returns {Object} Simulation results
  */
+/**
+ * Calculate basic system metrics without full simulation
+ * Used for live updates in the UI
+ * @param {Array} objects - All canvas objects
+ * @returns {Object} { dcCapacity, acCapacity, batteryCapacity, systemCost }
+ */
+export function calculateSystemMetrics(objects) {
+  const panels = objects.filter(o => o.type === 'panel' || o.type === 'Solar Panel');
+  const inverters = objects.filter(o => o.type === 'inverter' || o.type === 'Inverter');
+  const batteries = objects.filter(o => o.type === 'battery' || o.type === 'Battery');
+
+  const dcCapacity = panels.reduce((sum, p) => sum + (p.watts || 0), 0) / 1000; // kWp
+  const acCapacity = inverters.reduce((sum, i) => sum + (i.capKw || 0), 0); // kW
+  const batteryCapacity = batteries.reduce((sum, b) => sum + (b.capKwh || 0), 0); // kWh
+
+  // Simple cost approximation (can be refined or rely on external estimation)
+  const systemCost = (dcCapacity * 35000) + (batteryCapacity * 20000) + (acCapacity * 8000);
+
+  return { dcCapacity, acCapacity, batteryCapacity, systemCost };
+}
+
 export function runSimulation(objects, wires, params) {
   let {
     baseLoad = 500, // units/month
@@ -849,8 +870,8 @@ export function calculateYearlyShadowLoss(objects, lat, lon, orientation = 0) {
   // Reduced loop for performance, but good enough for estimates
   // Check 15th of each month
   for (let m = 0; m < 12; m++) {
-    const date = new Date();
-    date.setMonth(m, 15);
+    const year = new Date().getFullYear();
+    const date = new Date(year, m, 15);
 
     // Check hourly from 7am to 5pm (More granular to catch moving shadows)
     const times = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
@@ -879,7 +900,7 @@ export function calculateYearlyShadowLoss(objects, lat, lon, orientation = 0) {
       const visualAngle = ((hour - 6) / 12) * Math.PI + (orientation * Math.PI / 180);
 
       const shadowLen = 1 / Math.tan(sunPos.altitude);
-      const cappedLen = Math.min(shadowLen, 30); // Allow longer shadows
+      const cappedLen = Math.min(shadowLen, 100); // Allow longer shadows (increased from 30)
 
       // Canvas `getShadowVector` uses: x: -cos(angle), y: -sin(angle)
       const dx = -Math.cos(visualAngle) * cappedLen;
@@ -887,9 +908,12 @@ export function calculateYearlyShadowLoss(objects, lat, lon, orientation = 0) {
 
       // Pre-calculate vertices for all potential casters to avoid re-calc inside loop
       const casters = objects.map(obj => {
+        // Fallback for height/Z-index
+        // Often 'height' refers to physical dimension Y, 'depth' to Z, or h_z is explicit z-height (elevation + height)
+        const z = obj.h_z !== undefined ? obj.h_z : (obj.depth || obj.height || 2); // Default 2m if unknown?
         return {
           id: obj.id,
-          h_z: obj.h_z || 0,
+          h_z: z,
           vertices: getObjectVertices(obj), // Helper to get real vertices
           obj: obj
         };
@@ -897,7 +921,7 @@ export function calculateYearlyShadowLoss(objects, lat, lon, orientation = 0) {
 
       panels.forEach(panel => {
         // Monte Carlo sampling
-        const samples = 15; // Increased samples
+        const samples = 25; // Increased samples for better accuracy
 
         for (let i = 0; i < samples; i++) {
           panelLossMap[panel.id].total++;
@@ -929,10 +953,14 @@ export function calculateYearlyShadowLoss(objects, lat, lon, orientation = 0) {
 
             // Project Shadow Vertices
             // Shadow Vertex = Real Vertex + (Vector * HeightDiff)
-            const shadowPoly = caster.vertices.map(v => ({
+            const projectedVertices = caster.vertices.map(v => ({
               x: v.x + (dx * dh),
               y: v.y + (dy * dh)
             }));
+
+            // Calculate the full shadow polygon (Convex Hull of Base + Projected Top)
+            const allPoints = [...caster.vertices, ...projectedVertices];
+            const shadowPoly = getConvexHull(allPoints);
 
             // Check if point is inside Shadow Polygon
             if (isPointInPolygon({ x: wx, y: wy }, shadowPoly)) {
@@ -1000,6 +1028,46 @@ function getObjectVertices(obj) {
     x: cx + (p.x * Math.cos(rad) - p.y * Math.sin(rad)),
     y: cy + (p.x * Math.sin(rad) + p.y * Math.cos(rad))
   }));
+}
+
+/**
+ * Calculate Convex Hull of a set of points using Monotone Chain algorithm
+ * @param {Array} points Array of {x, y}
+ * @returns {Array} Array of {x, y} defining the convex hull
+ */
+function getConvexHull(points) {
+  if (points.length <= 2) return points;
+
+  // Sort points by X, then Y
+  const sorted = [...points].sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+
+  // Build lower hull
+  const lower = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+
+  // Build upper hull
+  const upper = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+
+  // Concatenate and remove duplicate start/end points
+  upper.pop();
+  lower.pop();
+  return [...lower, ...upper];
+}
+
+function crossProduct(o, a, b) {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 }
 
 /**

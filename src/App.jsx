@@ -21,6 +21,11 @@ import "./styles/index.css";
 function SolarApp() {
   // ... existing SolarApp code ...
 
+  // State Hooks for Auto-Save
+  const activeCustomerId = useSolarStore(state => state.activeCustomerId);
+  const objects = useSolarStore(state => state.objects);
+  const wires = useSolarStore(state => state.wires);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const setEquipmentTypes = useSolarStore(
@@ -30,6 +35,12 @@ function SolarApp() {
     (state) => state.setEquipmentLibrary
   );
 
+  // Store Actions
+  const saveProject = useSolarStore((state) => state.saveProject);
+  const loadProject = useSolarStore((state) => state.loadProject);
+  const showToast = useSolarStore((state) => state.showToast);
+
+  // Load Equipment
   useEffect(() => {
     const loadEquipment = async () => {
       try {
@@ -58,11 +69,6 @@ function SolarApp() {
     loadEquipment();
   }, [setEquipmentTypes, setEquipmentLibrary]);
 
-  // Auto-Save & Load Logic
-  const saveProject = useSolarStore((state) => state.saveProject);
-  const loadProject = useSolarStore((state) => state.loadProject);
-  const showToast = useSolarStore((state) => state.showToast);
-
   // Load from LocalStorage on mount
   useEffect(() => {
     const savedProject = localStorage.getItem('solar_project_autosave');
@@ -77,19 +83,30 @@ function SolarApp() {
     }
   }, []);
 
-  // Auto-Save every 30 seconds
+  // Auto-save effect per customer
   useEffect(() => {
-    const interval = setInterval(() => {
-      const projectData = saveProject();
-      // Only save if there are objects or wires
-      if (projectData.objects.length > 0 || projectData.wires.length > 0) {
-        localStorage.setItem('solar_project_autosave', JSON.stringify(projectData));
-        showToast("Project auto-saved", "success");
-      }
-    }, 30000);
+    if (!activeCustomerId) return;
 
-    return () => clearInterval(interval);
-  }, [saveProject, showToast]);
+    // Debounce save
+    const timeoutId = setTimeout(() => {
+      const data = {
+        objects: useSolarStore.getState().objects,
+        wires: useSolarStore.getState().wires,
+        settings: {
+          scale: useSolarStore.getState().scale,
+          offsetX: useSolarStore.getState().offsetX,
+          offsetY: useSolarStore.getState().offsetY,
+          showGrid: useSolarStore.getState().showGrid,
+          cableMode: useSolarStore.getState().cableMode
+        }
+      };
+      localStorage.setItem(`solar_project_autosave_${activeCustomerId}`, JSON.stringify(data));
+    }, 2000);
+
+    return () => clearTimeout(timeoutId);
+  }, [objects, wires, activeCustomerId]);
+
+
 
   if (loading) {
     return (
@@ -117,7 +134,7 @@ function SolarApp() {
   }
 
   return (
-    <div className="flex flex-col w-full h-screen bg-gray-900 overflow-hidden">
+    <div className="flex flex-col w-full h-full bg-gray-900 overflow-hidden">
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         <LeftSidebar />
@@ -134,6 +151,10 @@ function SolarApp() {
     </div>
   );
 }
+
+import BatteryAnalysis from "./pages/BatteryAnalysis";
+import CustomerManagementPage from "./pages/CustomerManagementPage";
+import MainLayout from "./pages/MainLayout";
 
 function App() {
   const { isAuthenticated, loading } = useAuth();
@@ -160,18 +181,19 @@ function App() {
           path="/auth/callback"
           element={<AuthCallback />}
         />
-        <Route
-          path="/"
-          element={isAuthenticated ? <SolarApp /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/admin"
-          element={isAuthenticated ? <AdminPage /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/operations"
-          element={isAuthenticated ? <OperationsPage /> : <Navigate to="/login" />}
-        />
+
+        {/* Protect all main routes */}
+        {isAuthenticated ? (
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<SolarApp />} />
+            <Route path="/battery-analysis" element={<BatteryAnalysis />} />
+            <Route path="/operations" element={<OperationsPage />} />
+            <Route path="/customers" element={<CustomerManagementPage />} />
+            <Route path="/admin" element={<AdminPage />} />
+          </Route>
+        ) : (
+          <Route path="*" element={<Navigate to="/login" />} />
+        )}
       </Routes>
     </Router>
   );

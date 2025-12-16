@@ -1,0 +1,774 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Sun, Home, Battery, Zap, Settings, Info, Play, Pause, Table, AlertTriangle, Clock, TrendingUp } from
+'lucide-react';
+
+const Card = ({ children, className = "" }) => (
+<div className={`bg-white rounded-xl shadow-lg p-6 border border-slate-200 ${className}`}>
+    {children}
+</div>
+);
+
+// Standard normalized profile for Solar only (Load is dynamic)
+const DEFAULT_SOLAR_PROFILE = [
+0, 0, 0, 0, 0, 0.05, 0.2, 0.4, 0.6, 0.8, 0.95, 1.0,
+1.0, 0.95, 0.8, 0.6, 0.3, 0.1, 0.05, 0, 0, 0, 0, 0
+];
+
+// Helper to determine if an hour falls within a start/duration window
+const isHourInWindow = (hour, start, duration) => {
+if (duration === 0) return false;
+const end = (start + duration) % 24;
+
+if (start < end) { return hour>= start && hour < end; } else { // Wrap range (e.g. 22 to 02) return hour>= start || hour
+        < end; } }; // Flow Line Component (Reused for visualization) const FlowLine=({ active, speed=1,
+            color="bg-slate-300" , direction="right" , vertical=false, label=null })=> {
+            if (!active) return
+            <div className={`absolute ${vertical ? 'w-1 h-full left-1/2 -translate-x-1/2'
+                : 'h-1 w-full top-1/2 -translate-y-1/2' } bg-slate-100 rounded-full`} />;
+
+            return (
+            <>
+                <div className={`absolute inset-0 ${color} opacity-30`} />
+                <div className={`absolute inset-0 flex ${vertical ? 'flex-col items-center' : 'flex-row items-center' }
+                    justify-around`}>
+                    {[...Array(5)].map((_, i) => (
+                    <div key={i} className={`w-2 h-2 rounded-full ${color} shadow-[0_0_8px_currentColor]`} style={{
+                        animation: `flow-${vertical ? (direction==='up' ? 'up' : 'down' ) : (direction==='left' ? 'left'
+                        : 'right' )} ${2/speed}s linear infinite`, animationDelay: `${i * 0.4}s` }} />
+                    ))}
+                </div>
+                {label && (
+                <div
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm whitespace-nowrap z-10 border border-slate-100">
+                    {label}
+                </div>
+                )}
+                <style>
+                    {
+                        ` @keyframes flow-right {
+                            from {
+                                transform: translateX(-100%);
+                            }
+
+                            to {
+                                transform: translateX(400%);
+                            }
+                        }
+
+                        @keyframes flow-left {
+                            from {
+                                transform: translateX(400%);
+                            }
+
+                            to {
+                                transform: translateX(-100%);
+                            }
+                        }
+
+                        @keyframes flow-down {
+                            from {
+                                transform: translateY(-100%);
+                            }
+
+                            to {
+                                transform: translateY(400%);
+                            }
+                        }
+
+                        @keyframes flow-up {
+                            from {
+                                transform: translateY(400%);
+                            }
+
+                            to {
+                                transform: translateY(-100%);
+                            }
+                        }
+
+                        `
+                    }
+                </style>
+            </>
+            );
+            };
+
+            export default function AcCoupledSimulation24H() {
+            // --- SYSTEM CONFIGURATION (Inputs) ---
+            const [config, setConfig] = useState({
+            solarPeakKw: 10,
+            batteryCapacityKwh: 20,
+            pcsMaxPowerKw: 5,
+            initialSoc: 50,
+            gridChargeThresholdSoc: 20, // Grid charge when below this
+
+            // Load Profile
+            baseLoadKw: 2.0,
+            peakLoadKw: 6.0,
+            peakStartHour: 17,
+            peakDuration: 5,
+
+            // Grid Export Priority
+            exportStartHour: 10, // 10 AM
+            exportDuration: 4, // 4 Hours
+            exportMinSoc: 90, // Only export if battery is above this during priority time
+            });
+
+            // --- SIMULATION STATE ---
+            const [outageHours, setOutageHours] = useState(new Set()); // Set of hours (0-23) where grid is DOWN
+            const [simulationData, setSimulationData] = useState([]);
+            const [selectedHour, setSelectedHour] = useState(12);
+            const [isPlaying, setIsPlaying] = useState(false);
+
+            // Helper function to handle input changes for number fields
+            const handleInputChange = (field, value, isInt = false) => {
+            let numericValue = isInt ? parseInt(value) : parseFloat(value);
+            if (isNaN(numericValue) || numericValue < 0) numericValue=0; setConfig(prev=> ({ ...prev, [field]:
+                numericValue }));
+                };
+
+                // --- RUN SIMULATION ENGINE ---
+                useEffect(() => {
+                runSimulation();
+                }, [config, outageHours]);
+
+                const runSimulation = () => {
+                let currentSoc = config.initialSoc;
+                const newSimData = [];
+
+                for (let h = 0; h < 24; h++) { // 1. Determine Inputs for this hour // Solar const
+                    solarKw=DEFAULT_SOLAR_PROFILE[h] * config.solarPeakKw; // Dynamic Load Logic let
+                    loadKw=config.baseLoadKw; const isPeak=isHourInWindow(h, config.peakStartHour, config.peakDuration);
+                    if (isPeak) loadKw=config.peakLoadKw; const isOutage=outageHours.has(h); const
+                    isExportPriority=isHourInWindow(h, config.exportStartHour, config.exportDuration); // 2. Initialize
+                    Flow Variables let flows={ solarToLoad: 0, solarToBattery: 0, solarToGrid: 0, gridToLoad: 0,
+                    gridToBattery: 0, batteryToLoad: 0, curtailedSolar: 0 }; let batteryStatus='IDLE' ; let
+                    gridStatus=isOutage ? 'OUTAGE' : 'IDLE' ; let message="" ; // 3. Logic Execution // Step A: Solar
+                    Logic // Solar covers Load first const solarDirectlyToLoad=Math.min(solarKw, loadKw);
+                    flows.solarToLoad=solarDirectlyToLoad; let remainingSolar=Math.max(0, solarKw - loadKw); let
+                    remainingLoad=Math.max(0, loadKw - solarKw); // Step B: Grid Charge Logic (Force Charge - Highest
+                    Priority) const shouldGridCharge=currentSoc < config.gridChargeThresholdSoc && !isOutage; if
+                    (shouldGridCharge) { message="Low Battery - Force Grid Charge" ; // Use remaining solar first to
+                    charge const solarCharge=Math.min(remainingSolar, config.pcsMaxPowerKw);
+                    flows.solarToBattery=solarCharge; remainingSolar -=solarCharge; // Top up with grid power if PCS has
+                    capacity const gridCharge=Math.min(config.pcsMaxPowerKw - solarCharge, config.batteryCapacityKwh *
+                    (100 - currentSoc) / 100); flows.gridToBattery=gridCharge; batteryStatus='CHARGING' ;
+                    gridStatus='IMPORT' ; } // Step C: Normal Operation (Excess Solar Management) else if
+                    (remainingSolar> 0) {
+
+                    // Check if we should prioritize export
+                    const prioritizeExport = isExportPriority && currentSoc >= config.exportMinSoc;
+
+                    if (prioritizeExport && !isOutage) {
+                    // Priority: Export max, charge min
+
+                    // Charge the small remaining room (e.g., up to 100%)
+                    const kwhRoom = (config.batteryCapacityKwh * (100 - currentSoc)) / 100;
+                    const chargeAmt = Math.min(remainingSolar, kwhRoom, 0.5); // Charge min 0.5kW
+
+                    flows.solarToBattery = chargeAmt;
+                    remainingSolar -= chargeAmt;
+
+                    // Export the rest up to PCS max (or all of it)
+                    const exportAmt = Math.min(remainingSolar, config.pcsMaxPowerKw - chargeAmt);
+                    flows.solarToGrid = exportAmt;
+                    remainingSolar -= exportAmt;
+
+                    gridStatus = 'EXPORT';
+                    message = "Export Priority Active: Sending excess to Grid";
+
+                    } else {
+                    // Standard Self-Consumption: Charge Battery first
+                    if (currentSoc < 100) { const maxChargeRate=config.pcsMaxPowerKw; const
+                        kwhRoom=(config.batteryCapacityKwh * (100 - currentSoc)) / 100; const
+                        actualCharge=Math.min(remainingSolar, maxChargeRate, kwhRoom);
+                        flows.solarToBattery=actualCharge; remainingSolar -=actualCharge; batteryStatus='CHARGING' ;
+                        message="Charging from Excess Solar (Self-Consumption)" ; } // Export rest to Grid (if not
+                        outage) if (remainingSolar> 0) {
+                        if (!isOutage) {
+                        flows.solarToGrid = remainingSolar;
+                        gridStatus = 'EXPORT';
+                        } else {
+                        flows.curtailedSolar = remainingSolar;
+                        message += " (Grid Down: Solar Curtailed)";
+                        }
+                        }
+                        }
+                        }
+
+                        // Step D: Normal Operation (Load Deficit Management)
+                        if (remainingLoad > 0) {
+
+                        // Discharge Battery?
+                        if (currentSoc > 0) {
+                        const maxDischargeRate = config.pcsMaxPowerKw;
+                        const kwhAvailable = (config.batteryCapacityKwh * currentSoc) / 100;
+
+                        const dischargeNeeded = remainingLoad;
+                        const actualDischarge = Math.min(dischargeNeeded, maxDischargeRate, kwhAvailable);
+
+                        flows.batteryToLoad = actualDischarge;
+                        remainingLoad -= actualDischarge;
+                        batteryStatus = 'DISCHARGING';
+
+                        if (!message) message = "Discharging Battery for Load";
+                        }
+
+                        // Still need power? Use Grid
+                        if (remainingLoad > 0) {
+                        if (!isOutage) {
+                        flows.gridToLoad = remainingLoad;
+                        gridStatus = gridStatus === 'EXPORT' ? 'NET_METER' : 'IMPORT';
+                        if (!message) message = "Importing from Grid for Load";
+                        } else {
+                        message = "OUTAGE: Load Shedding Active (Unserved Load)";
+                        // remainingLoad is unserved
+                        }
+                        }
+                        }
+
+
+                        // 4. Update SoC for next hour
+                        // Net flow into battery (kWh)
+                        const energyIntoBatt = flows.solarToBattery + flows.gridToBattery;
+                        const energyOutBatt = flows.batteryToLoad;
+                        const netEnergy = energyIntoBatt - energyOutBatt;
+
+                        const socChange = (netEnergy / config.batteryCapacityKwh) * 100;
+                        let nextSoc = Math.min(100, Math.max(0, currentSoc + socChange));
+
+                        // Store Data
+                        newSimData.push({
+                        hour: h,
+                        solarKw,
+                        loadKw,
+                        socStart: currentSoc,
+                        socEnd: nextSoc,
+                        gridStatus,
+                        batteryStatus,
+                        flows,
+                        message,
+                        isOutage,
+                        isPeak,
+                        isExportPriority: isExportPriority
+                        });
+
+                        currentSoc = nextSoc;
+                        }
+                        setSimulationData(newSimData);
+                        };
+
+                        // --- PLAYBACK CONTROLS ---
+                        useEffect(() => {
+                        let interval;
+                        if (isPlaying) {
+                        interval = setInterval(() => {
+                        setSelectedHour(prev => (prev + 1) % 24);
+                        }, 1500); // 1.5 seconds per hour
+                        }
+                        return () => clearInterval(interval);
+                        }, [isPlaying]);
+
+                        const toggleOutage = (hour) => {
+                        const newSet = new Set(outageHours);
+                        if (newSet.has(hour)) newSet.delete(hour);
+                        else newSet.add(hour);
+                        setOutageHours(newSet);
+                        };
+
+                        // Get current frame data
+                        const currentData = simulationData[selectedHour] || {
+                        flows: {}, gridStatus: 'IDLE', batteryStatus: 'IDLE', socStart: 0, solarKw: 0, loadKw: 0,
+                        isPeak: false, isExportPriority: false
+                        };
+
+                        // Helper for generating time options
+                        const hourOptions = [...Array(24)].map((_, i) => ({ value: i, label: `${i.toString().padStart(2,
+                        '0')}:00` }));
+
+
+                        return (
+                        <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-800">
+
+                            {/* HEADER */}
+                            <div
+                                className="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+                                        <Zap className="text-yellow-500 fill-yellow-500" />
+                                        24H BESS Analysis Tool
+                                    </h1>
+                                    <p className="text-slate-500 text-sm">Simulate Grid, Solar, and Battery interactions
+                                        hour-by-hour</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={()=> setIsPlaying(!isPlaying)} className={`flex items-center gap-2
+                                        px-6 py-2 rounded-lg text-sm font-bold transition-all ${isPlaying ? 'bg-red-100
+                                        text-red-700' : 'bg-blue-600 text-white shadow-md hover:bg-blue-700'}`}>
+                                        {isPlaying ? <>
+                                            <Pause size={16} /> Pause
+                                        </> : <>
+                                            <Play size={16} /> Run Simulation
+                                        </>}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-6">
+
+                                {/* --- LEFT SIDE: CONFIGURATION (3 cols) --- */}
+                                <div className="xl:col-span-3 space-y-4">
+                                    <Card className="bg-white sticky top-4 max-h-[90vh] overflow-y-auto">
+                                        <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
+                                            <Settings className="text-slate-400" size={18} />
+                                            <h2 className="font-bold text-slate-700">System Specs</h2>
+                                        </div>
+
+                                        <div className="space-y-4">
+
+                                            {/* 1. System Sizing */}
+                                            <div className="grid grid-cols-2 gap-3 pb-4 border-b border-slate-100">
+                                                <InputField label="Solar PV Size (kW)" icon={Sun}
+                                                    value={config.solarPeakKw} onChange={(v)=>
+                                                    handleInputChange('solarPeakKw', v)} color="text-yellow-500" />
+                                                    <InputField label="Battery Capacity (kWh)" icon={Battery}
+                                                        value={config.batteryCapacityKwh} onChange={(v)=>
+                                                        handleInputChange('batteryCapacityKwh', v)}
+                                                        color="text-emerald-500" />
+                                                        <InputField label="PCS / Inverter (kW)" icon={Zap}
+                                                            value={config.pcsMaxPowerKw} onChange={(v)=>
+                                                            handleInputChange('pcsMaxPowerKw', v)} color="text-blue-500"
+                                                            />
+                                            </div>
+
+
+                                            {/* 2. Load Profile Configuration */}
+                                            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                                                <label
+                                                    className="text-xs font-bold text-indigo-800 uppercase flex items-center gap-2 mb-3">
+                                                    <Home size={14} /> Load Profile Settings
+                                                </label>
+
+                                                <div className="space-y-3">
+                                                    <InputField label="Base Load (kW)" value={config.baseLoadKw}
+                                                        onChange={(v)=> handleInputChange('baseLoadKw', v)}
+                                                        helper="Average load outside peak hours."/>
+                                                        <InputField label="Peak Load (kW)" value={config.peakLoadKw}
+                                                            onChange={(v)=> handleInputChange('peakLoadKw', v)}
+                                                            color="text-red-600" helper="Load during the peak window."/>
+
+                                                            <div
+                                                                className="grid grid-cols-2 gap-2 pt-2 border-t border-indigo-200">
+                                                                <SelectField label="Peak Start Time"
+                                                                    value={config.peakStartHour} options={hourOptions}
+                                                                    onChange={(v)=> handleInputChange('peakStartHour',
+                                                                    v, true)} />
+                                                                    <InputField label="Duration (Hrs)"
+                                                                        value={config.peakDuration} onChange={(v)=>
+                                                                        handleInputChange('peakDuration', v, true)}
+                                                                        isInt={true} />
+                                                            </div>
+                                                </div>
+                                            </div>
+
+                                            {/* 3. Grid Export Priority */}
+                                            <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                                                <label
+                                                    className="text-xs font-bold text-purple-800 uppercase flex items-center gap-2 mb-3">
+                                                    <TrendingUp size={14} /> Grid Export Priority Window (Free Time)
+                                                </label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <SelectField label="Start Hour" value={config.exportStartHour}
+                                                        options={hourOptions} onChange={(v)=>
+                                                        handleInputChange('exportStartHour', v, true)} />
+                                                        <InputField label="Duration (Hrs)" value={config.exportDuration}
+                                                            onChange={(v)=> handleInputChange('exportDuration', v,
+                                                            true)} isInt={true} />
+                                                </div>
+                                                <InputField label="Min SoC for Export (%)" value={config.exportMinSoc}
+                                                    onChange={(v)=> handleInputChange('exportMinSoc', v, true)}
+                                                    isInt={true}
+                                                    helper="Excess solar is exported only if SoC is above this."
+                                                    />
+                                            </div>
+
+                                            {/* 4. Battery Control */}
+                                            <div className="pt-2 border-t border-slate-100 space-y-3">
+                                                <InputField label="Initial SoC (%)" value={config.initialSoc}
+                                                    onChange={(v)=> handleInputChange('initialSoc', v, true)}
+                                                    isInt={true}
+                                                    color="text-slate-500"
+                                                    />
+                                                    <InputField label="Grid Charge Threshold (%)"
+                                                        value={config.gridChargeThresholdSoc} onChange={(v)=>
+                                                        handleInputChange('gridChargeThresholdSoc', v, true)}
+                                                        isInt={true}
+                                                        helper="Grid is used to charge battery when SoC drops below
+                                                        this."
+                                                        color="text-red-500"
+                                                        />
+                                            </div>
+                                        </div>
+                                    </Card>
+                                </div>
+
+                                {/* --- CENTER/RIGHT: VISUALIZATION & DATA (9 cols) --- */}
+                                <div className="xl:col-span-9 space-y-6">
+
+                                    {/* 1. VISUALIZER (The "Digital Twin") */}
+                                    <div
+                                        className="relative h-[400px] bg-slate-100 rounded-xl border border-slate-200 shadow-inner overflow-hidden select-none">
+                                        {/* Hour Indicator */}
+                                        <div
+                                            className="absolute top-4 left-4 z-40 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow-sm border border-slate-200">
+                                            <div
+                                                className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">
+                                                Time of Day</div>
+                                            <div className="flex items-center gap-2">
+                                                <Clock size={20} className="text-slate-600" />
+                                                <div className="text-2xl font-mono font-bold text-slate-800">
+                                                    {selectedHour.toString().padStart(2, '0')}:00
+                                                </div>
+                                            </div>
+                                            {currentData.isPeak && <div
+                                                className="mt-1 text-center text-[10px] bg-red-100 text-red-600 font-bold rounded px-1">
+                                                PEAK LOAD TIME</div>}
+                                            {currentData.isExportPriority && !currentData.isOutage && <div
+                                                className="mt-1 text-center text-[10px] bg-purple-100 text-purple-600 font-bold rounded px-1">
+                                                EXPORT PRIORITY</div>}
+                                        </div>
+
+                                        {/* Outage Warning Banner */}
+                                        {currentData.isOutage && (
+                                        <div
+                                            className="absolute top-0 left-0 right-0 bg-red-500 text-white text-center py-1 text-xs font-bold uppercase z-50 animate-pulse">
+                                            ⚠️ Grid Power Outage Active
+                                        </div>
+                                        )}
+
+                                        {/* --- COMPONENTS --- */}
+
+                                        {/* AC BUS */}
+                                        <div
+                                            className="absolute top-1/2 left-[15%] right-[15%] h-3 bg-slate-800 rounded -translate-y-1/2 shadow-xl z-20 flex items-center justify-center">
+                                            <span
+                                                className="text-[9px] text-slate-500 font-mono tracking-[0.2em] -mt-5">AC
+                                                BUS 230V</span>
+                                        </div>
+
+                                        {/* GRID */}
+                                        <div
+                                            className="absolute left-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-30">
+                                            <div className={`w-14 h-14 rounded-full shadow-lg border-2 flex items-center
+                                                justify-center transition-colors ${currentData.isOutage
+                                                ? 'bg-red-100 border-red-500 grayscale' : 'bg-white border-slate-300'
+                                                }`}>
+                                                <span className="text-2xl">🗼</span>
+                                            </div>
+                                            <div className="text-xs font-bold text-slate-600 bg-white/80 px-2 rounded">
+                                                Grid</div>
+                                        </div>
+
+                                        {/* SOLAR */}
+                                        <div
+                                            className="absolute top-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-30">
+                                            <div
+                                                className="w-16 h-16 bg-white rounded-xl shadow-lg border-2 border-yellow-400 flex flex-col items-center justify-center p-1">
+                                                <Sun className={`text-yellow-500 ${currentData.solarKw> 0 ?
+                                                    'animate-spin-slow' : 'opacity-40'}`} size={28} />
+                                                    <div className="text-[10px] font-mono font-bold">
+                                                        {config.solarPeakKw}kW *
+                                                        {DEFAULT_SOLAR_PROFILE[selectedHour].toFixed(2)} =
+                                                        {currentData.solarKw.toFixed(1)}kW</div>
+                                            </div>
+                                        </div>
+
+                                        {/* LOAD */}
+                                        <div
+                                            className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-30">
+                                            <div className={`w-14 h-14 bg-white rounded-full shadow-lg border-2 flex
+                                                items-center justify-center transition-all ${currentData.isPeak
+                                                ? 'border-red-400 shadow-red-200' : 'border-indigo-300' }`}>
+                                                <Home className={currentData.isPeak ? 'text-red-600' : 'text-indigo-600'
+                                                    } size={24} />
+                                            </div>
+                                            <div className={`text-xs font-bold bg-white/80 px-2 rounded
+                                                ${currentData.isPeak ? 'text-red-600' : 'text-indigo-700' }`}>
+                                                {currentData.loadKw.toFixed(1)} kW</div>
+                                        </div>
+
+                                        {/* BATTERY */}
+                                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-40 z-30">
+                                            <div
+                                                className="bg-white rounded-lg shadow-lg border border-emerald-500 p-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[10px] font-bold text-slate-500">BESS
+                                                        ({config.pcsMaxPowerKw}kW PCS)</span>
+                                                    <span className={`text-xs font-mono font-bold ${currentData.socStart
+                                                        < config.gridChargeThresholdSoc ? 'text-red-500'
+                                                        : 'text-emerald-600' }`}>
+                                                        {currentData.socStart.toFixed(0)}%
+                                                    </span>
+                                                </div>
+                                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-full bg-emerald-500 transition-all duration-300"
+                                                        style={{ width: `${currentData.socStart}%` }} />
+                                                </div>
+                                                {/* Status Badge */}
+                                                <div className="mt-2 text-center">
+                                                    {currentData.batteryStatus === 'CHARGING' && <span
+                                                        className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold animate-pulse">CHARGING</span>}
+                                                    {currentData.batteryStatus === 'DISCHARGING' && <span
+                                                        className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold animate-pulse">DISCHARGING</span>}
+                                                    {currentData.batteryStatus === 'IDLE' && <span
+                                                        className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">IDLE</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* --- CONNECTIONS & FLOWS --- */}
+                                        {/* Lines */}
+                                        <div
+                                            className="absolute top-1/2 left-[80px] w-[calc(15%-80px)] h-1 bg-slate-300 -translate-y-1/2" />
+                                        <div
+                                            className="absolute top-1/2 right-[80px] w-[calc(15%-80px)] h-1 bg-slate-300 -translate-y-1/2" />
+                                        <div
+                                            className="absolute top-[80px] left-1/2 w-1 h-[calc(50%-80px)] bg-slate-300 -translate-x-1/2" />
+                                        <div
+                                            className="absolute bottom-[80px] left-1/2 w-1 h-[calc(50%-80px)] bg-slate-300 -translate-x-1/2" />
+
+                                        {/* Animations */}
+                                        {/* Solar -> Load */}
+                                        <FlowLine active={currentData.flows.solarToLoad> 0} vertical={true}
+                                            direction="down" color="bg-yellow-400" />
+                                            <div
+                                                className="absolute top-1/2 left-1/2 w-[35%] h-full -translate-y-1/2 pointer-events-none">
+                                                <FlowLine active={currentData.flows.solarToLoad> 0} direction="right"
+                                                    color="bg-yellow-400" label={currentData.flows.solarToLoad > 0 ?
+                                                    `${currentData.flows.solarToLoad.toFixed(1)}` : null} />
+                                            </div>
+
+                                            {/* Solar -> Grid */}
+                                            <div
+                                                className="absolute top-1/2 right-1/2 w-[35%] h-full -translate-y-1/2 pointer-events-none rotate-180">
+                                                <FlowLine active={currentData.flows.solarToGrid> 0} direction="right"
+                                                    color="bg-purple-400" label={currentData.flows.solarToGrid > 0 ?
+                                                    `${currentData.flows.solarToGrid.toFixed(1)}` : null} />
+                                            </div>
+
+                                            {/* Solar -> Battery */}
+                                            <div
+                                                className="absolute top-1/2 left-1/2 w-full h-[35%] -translate-x-1/2 pointer-events-none mt-2">
+                                                <FlowLine active={currentData.flows.solarToBattery> 0} vertical={true}
+                                                    direction="down" color="bg-emerald-400"
+                                                    label={currentData.flows.solarToBattery > 0 ?
+                                                    `${currentData.flows.solarToBattery.toFixed(1)}` : null} />
+                                            </div>
+
+                                            {/* Grid -> Battery */}
+                                            <div
+                                                className="absolute top-1/2 left-[10%] w-[40%] h-full -translate-y-1/2 pointer-events-none">
+                                                <FlowLine active={currentData.flows.gridToBattery> 0} direction="right"
+                                                    color="bg-red-400" />
+                                            </div>
+                                            <div
+                                                className="absolute top-1/2 left-1/2 w-full h-[35%] -translate-x-1/2 pointer-events-none mt-2">
+                                                <FlowLine active={currentData.flows.gridToBattery> 0} vertical={true}
+                                                    direction="down" color="bg-red-400"
+                                                    label={currentData.flows.gridToBattery > 0 ?
+                                                    `${currentData.flows.gridToBattery.toFixed(1)}` : null} />
+                                            </div>
+
+                                            {/* Grid -> Load */}
+                                            <div
+                                                className="absolute top-1/2 left-[10%] w-[80%] h-full -translate-y-1/2 pointer-events-none">
+                                                <FlowLine active={currentData.flows.gridToLoad> 0} direction="right"
+                                                    color="bg-red-400" label={currentData.flows.gridToLoad > 0 ?
+                                                    `${currentData.flows.gridToLoad.toFixed(1)}` : null} />
+                                            </div>
+
+                                            {/* Battery -> Load */}
+                                            <div
+                                                className="absolute bottom-[80px] left-1/2 w-full h-[calc(50%-80px)] -translate-x-1/2 pointer-events-none mb-2">
+                                                <FlowLine active={currentData.flows.batteryToLoad> 0} vertical={true}
+                                                    direction="up" color="bg-blue-400"
+                                                    label={currentData.flows.batteryToLoad > 0 ?
+                                                    `${currentData.flows.batteryToLoad.toFixed(1)}` : null} />
+                                            </div>
+                                            <div
+                                                className="absolute top-1/2 left-1/2 w-[35%] h-full -translate-y-1/2 pointer-events-none ml-2">
+                                                <FlowLine active={currentData.flows.batteryToLoad> 0} direction="right"
+                                                    color="bg-blue-400" />
+                                            </div>
+                                    </div>
+
+                                    {/* 2. TIMELINE & OUTAGE SCHEDULER */}
+                                    <Card>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                                <AlertTriangle className="text-slate-400" size={18} />
+                                                Timeline & Grid Availability
+                                            </h3>
+                                            <span
+                                                className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">Click
+                                                bar to toggle outage</span>
+                                        </div>
+
+                                        <div className="relative pt-6 pb-2">
+                                            {/* Hour Bars */}
+                                            <div className="flex justify-between gap-1 h-12">
+                                                {simulationData.map((hourData, i) => (
+                                                <button key={i} onClick={()=> toggleOutage(i)}
+                                                    className={`flex-1 rounded-sm relative group transition-all
+                                                    hover:scale-110 ${
+                                                    outageHours.has(i)
+                                                    ? 'bg-red-200 hover:bg-red-300'
+                                                    : 'bg-emerald-100 hover:bg-emerald-200'
+                                                    } ${selectedHour === i ? 'ring-2 ring-blue-500 z-10' : ''}`}
+                                                    >
+                                                    {/* Tooltip */}
+                                                    <div
+                                                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-50">
+                                                        {i}:00 - {outageHours.has(i) ? 'Outage' : 'Grid OK'}
+                                                        <div className="opacity-70">Load: {hourData.loadKw.toFixed(1)}kW
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Status Dot */}
+                                                    {outageHours.has(i) && (
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                                                    </div>
+                                                    )}
+
+                                                    {/* Time Window Indicator Line */}
+                                                    {hourData.isPeak &&
+                                                    <div
+                                                        className="absolute bottom-0 left-0 right-0 h-1 bg-red-400/50" />
+                                                    }
+                                                    {hourData.isExportPriority &&
+                                                    <div
+                                                        className="absolute top-0 left-0 right-0 h-1 bg-purple-400/50" />
+                                                    }
+                                                </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Slider Scrubber */}
+                                            <input type="range" min="0" max="23" step="1" value={selectedHour}
+                                                onChange={(e)=> {
+                                            setSelectedHour(parseInt(e.target.value));
+                                            setIsPlaying(false);
+                                            }}
+                                            className="w-full absolute top-1/2 -translate-y-1/2 opacity-0 cursor-pointer
+                                            h-12"
+                                            />
+
+                                            {/* Labels */}
+                                            <div
+                                                className="flex justify-between mt-2 text-[10px] text-slate-400 font-mono">
+                                                <span>00:00</span>
+                                                <span>06:00</span>
+                                                <span>12:00</span>
+                                                <span>18:00</span>
+                                                <span>23:00</span>
+                                            </div>
+                                        </div>
+                                    </Card>
+
+                                    {/* 3. DATA TABLE */}
+                                    <Card className="overflow-hidden">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Table className="text-slate-400" size={18} />
+                                            <h3 className="font-bold text-slate-700">Hourly Analysis</h3>
+                                        </div>
+                                        <div className="overflow-x-auto max-h-[300px]">
+                                            <table className="w-full text-xs text-left">
+                                                <thead
+                                                    className="bg-slate-50 text-slate-500 uppercase font-bold sticky top-0 z-10">
+                                                    <tr>
+                                                        <th className="p-2 text-center">Hour</th>
+                                                        <th className="p-2 text-right">Solar (kW)</th>
+                                                        <th className="p-2 text-right">Load (kW)</th>
+                                                        <th className="p-2 text-center">Grid</th>
+                                                        <th className="p-2 text-right text-emerald-600">Batt SOC Start
+                                                        </th>
+                                                        <th className="p-2 text-right text-red-600">Import (kWh)</th>
+                                                        <th className="p-2 text-right text-purple-600">Export (kWh)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {simulationData.map((row, i) => (
+                                                    <tr key={i} className={`hover:bg-slate-50 transition-colors
+                                                        ${selectedHour===i ? 'bg-blue-50' : '' }`} onClick={()=> {
+                                                        setSelectedHour(i); setIsPlaying(false); }}>
+                                                        <td
+                                                            className="p-2 font-mono text-center font-bold text-slate-400">
+                                                            {row.hour}:00</td>
+                                                        <td className="p-2 text-right font-mono">
+                                                            {row.solarKw.toFixed(1)}</td>
+                                                        <td className={`p-2 text-right font-mono ${row.isPeak
+                                                            ? 'font-bold text-red-600' : '' }`}>{row.loadKw.toFixed(1)}
+                                                        </td>
+                                                        <td className="p-2 text-center">
+                                                            {row.isOutage && <span
+                                                                className="bg-red-100 text-red-700 px-1 rounded font-bold">OUTAGE</span>}
+                                                            {!row.isOutage && row.isExportPriority && <span
+                                                                className="bg-purple-100 text-purple-700 px-1 rounded font-bold">EXPORT</span>}
+                                                            {!row.isOutage && !row.isExportPriority && <span
+                                                                className="bg-emerald-50 text-emerald-600 px-1 rounded">OK</span>}
+                                                        </td>
+                                                        <td className="p-2 text-right font-mono font-bold">
+                                                            {row.socStart.toFixed(0)}%</td>
+                                                        <td className="p-2 text-right font-mono">{(row.flows.gridToLoad
+                                                            + row.flows.gridToBattery).toFixed(1)}</td>
+                                                        <td className="p-2 text-right font-mono">
+                                                            {row.flows.solarToGrid.toFixed(1)}</td>
+                                                    </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </Card>
+
+                                </div>
+                            </div>
+                        </div>
+                        );
+                        }
+
+                        // Reusable Input Field Component
+                        const InputField = ({ label, icon: Icon, value, onChange, isInt = false, color =
+                        "text-slate-500", helper = null }) => (
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                                {Icon &&
+                                <Icon size={12} className={color} />}
+                                {label}
+                            </label>
+                            <div className="mt-1">
+                                <input type="number" value={value} onChange={(e)=> onChange(e.target.value)}
+                                className="w-full bg-slate-100 border-none rounded p-2 text-sm font-mono font-bold
+                                focus:ring-2 focus:ring-blue-500"
+                                step={isInt ? "1" : "0.1"}
+                                />
+                            </div>
+                            {helper && <p className={`text-[10px] mt-1 text-slate-500`}>{helper}</p>}
+                        </div>
+                        );
+
+                        // Reusable Select Field Component
+                        const SelectField = ({ label, value, options, onChange }) => (
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+                                {label}
+                            </label>
+                            <select value={value} onChange={(e)=> onChange(e.target.value)}
+                                className="w-full text-sm bg-slate-100 border-none rounded p-2 focus:ring-2
+                                focus:ring-blue-500"
+                                >
+                                {options.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                        );

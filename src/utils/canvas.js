@@ -109,104 +109,63 @@ export function renderCanvas(canvas, ctx, state) {
     drawWire(ctx, wire, objects, cableMode, state);
   });
 
-  // Sort objects by h_z (height) for proper depth rendering
+  // 0. Sort objects strictly by Height (Z)
+  // This is crucial for correct 2.5D layering (Painter's Algorithm)
   const sortedObjects = [...objects].sort((a, b) => (a.h_z || 0) - (b.h_z || 0));
   const shadowVector = getShadowVector(sunTime, lat, lon, orientation);
 
-  // Calculate effective heights for all objects (considering stacking)
-  const effectiveHeights = new Map();
-  sortedObjects.forEach((obj) => {
-    effectiveHeights.set(obj.id, calculateEffectiveHeight(obj, objects, shadowVector));
-  });
-
-  // Group objects by height for proper shadow layering
-  const groups = [];
-  let currentGroup = [];
-  let currentHeight = -1;
-
+  // 1. Unified Render Loop
+  // Iterate from Ground Up.
+  // For each object:
+  //   a. Draw its Shadow (Semi-transparent glaze).
+  //      - Because we are drawing later in the sequence, this shadow will overlay 
+  //        previously drawn (lower) objects, correctly darkening them.
+  //      - Use 'effectiveHeight' to handle Panels on Roofs (shadow length = gap).
+  //      - Use 'absoluteHeight' for Ground Shadows (shadow length = full height).
+  //   b. Draw the Object itself (Opaque).
+  //      - Covers the shadow we just drawn (preventing self-shadowing artifacts on top).
   sortedObjects.forEach(obj => {
-    const h = obj.h_z || 0;
-    if (currentGroup.length === 0 || Math.abs(h - currentHeight) < 0.01) {
-      currentGroup.push(obj);
-      currentHeight = h;
-    } else {
-      groups.push(currentGroup);
-      currentGroup = [obj];
-      currentHeight = h;
-    }
-  });
-  if (currentGroup.length > 0) groups.push(currentGroup);
-
-  // 0. Global Shadow Pass (Absolute Height)
-  // Ensures elevated objects cast their full shadow on the ground (e.g. Lift on Building)
-  // Fix: Use clipping to prevent "Double Shadow" artifacts where child shadow overlaps parent shadow
-  if (shadowVector) {
-    sortedObjects.forEach(obj => {
-      const relH = obj.relative_h !== undefined ? obj.relative_h : obj.h_z;
-      const absH = obj.h_z || 0;
-
-      // Draw absolute shadow if object is elevated relative to ground and is stacked
-      if (Math.abs(absH - relH) > 0.01 && absH > 0) {
-        // Find Parent (object below this one)
-        const parent = sortedObjects.find(p => {
-          if (p.id === obj.id) return false;
-          if ((p.h_z || 0) >= absH) return false;
-
-          // Check overlap (Area Intersection) matching adjustObjectLayering logic
-          const overlapW = Math.max(0, Math.min(obj.x + obj.w, p.x + p.w) - Math.max(obj.x, p.x));
-          const overlapH = Math.max(0, Math.min(obj.y + obj.h, p.y + p.h) - Math.max(obj.y, p.y));
-          const overlapArea = overlapW * overlapH;
-          const objArea = obj.w * obj.h;
-
-          return overlapArea > (objArea * 0.01);
-        });
-
-        if (parent) {
-          ctx.save();
-
-          // Define Clipping Region: Inverse of Parent's Projected Shadow Top
-          // This prevents drawing the child's shadow where the parent's shadow already exists
-          const pDx = shadowVector.x * (parent.h_z || 0);
-          const pDy = shadowVector.y * (parent.h_z || 0);
-
-          ctx.beginPath();
-          // Universe Rect
-          const margin = 2000; // Sufficiently large
-          ctx.rect(obj.x - margin, obj.y - margin, margin * 2, margin * 2);
-
-          // Hole: Parent's Projected Top (Main shadow body)
-          const px = parent.x + pDx;
-          const py = parent.y + pDy;
-          ctx.rect(px, py, parent.w, parent.h);
-
-          // Use evenodd rule to subtract the parent rect from the universe
-          ctx.clip("evenodd");
-
-          drawShadow(ctx, obj, shadowVector, absH);
-          ctx.restore();
-        } else {
-          drawShadow(ctx, obj, shadowVector, absH);
-        }
-      }
-    });
-  }
-
-  // Render groups
-  groups.forEach(group => {
-    // 1. Draw Relative Shadows for ALL objects in this group
-    // This ensures shadows are drawn on top of lower layers (e.g. roof or ground)
     if (shadowVector) {
-      group.forEach(obj => {
-        const relH = obj.relative_h !== undefined ? obj.relative_h : obj.h_z;
-        drawShadow(ctx, obj, shadowVector, relH);
-      });
+      // Determine Shadow Mode
+      // If object has a relative_h (gap), its local shadow is mainly that gap.
+      // BUT, what if that shadow falls off the edge?
+      // The "simple glaze" approach means we draw the shadow "as if projected on ground".
+      // If it falls on a lower roof, the lower roof is already drawn, so it gets darkened. Nice.
+      // If it falls on ground, ground is drawn, so it gets darkened. Nice.
+      // The only issue is the "Starting Point" of the shadow.
+      // PROJECTION:
+      // A shadow vector (dx, dy) shifts the shape.
+      // For a 15m building, shift is large.
+      // For a 15.1m panel (gap 0.1), shift is small?
+      // NO! The shadow *on the ground* is shifted by 15.1m.
+      // The shadow *on the roof* is shifted by 0.1m.
+      // We cannot draw BOTH with one shape easily.
+
+      // COMPROMISE for 2D Canvas:
+      // 1. Draw "Ground Shadow" (Full Displacement) -> This covers neighbors.
+      // 2. Draw "Local Shadow" (Relative Displacement) -> This covers immediate platform.
+      // Actually, if we draw "Ground Shadow" for a panel on a roof...
+      // The shadow will be displaced by 15m. It will appear far away on the ground.
+      // It WON'T appear on the roof (0.1m away).
+      // So we need to act based on context.
+
+      // Heuristic:
+      // If object is "Structure" (Base): Draw Full Height Shadow.
+      // If object is "Panel/Accessory" (Child): Draw Relative Height Shadow (Local).
+      // Rationale: Panels on roofs rarely effectively cast shadows on the ground 15m away 
+      // in a way that matters for visual design (it blurs out). Users care about the shadow ON the roof.
+
+      const isStructure = ['structure', 'tinshed', 'polygon', 'tree'].includes(obj.type);
+      const heightForShadow = isStructure ? (obj.h_z || 0) : (obj.relative_h || 0);
+
+      // Exception: Elevated structures starting from 0 should cast full shadow.
+      // (Handled by isStructure check).
+
+      drawShadow(ctx, obj, shadowVector, heightForShadow);
     }
 
-    // 2. Draw Objects for this group
-    group.forEach(obj => {
-      const isSelected = obj.id === selectedObjectId || (additionalSelectedIds || []).includes(obj.id);
-      drawObject(ctx, obj, isSelected, scale, offsetX, offsetY, state.showLabels, state.hoveredObjectId);
-    });
+    const isSelected = obj.id === selectedObjectId || (additionalSelectedIds || []).includes(obj.id);
+    drawObject(ctx, obj, isSelected, scale, offsetX, offsetY, state.showLabels, state.hoveredObjectId);
   });
 
   // Draw sun direction indicator on the grid
@@ -1263,64 +1222,15 @@ function calculateEffectiveHeight(obj, allObjects, shadowVector) {
 
   if (!foundBase) {
     // Object is on ground, use its own height
-    return obj.h_z;
+    return obj.h_z; // Return full height for ground shadow
   }
 
   // Object is on top of another object
-  // Check if it's at the edge or center
-  if (!shadowVector) {
-    return baseHeight + obj.h_z;
-  }
-
-  // Calculate shadow distance for the base object
-  const baseShadowDist = Math.sqrt(
-    Math.pow(shadowVector.x * baseHeight, 2) +
-    Math.pow(shadowVector.y * baseHeight, 2)
-  );
-
-  // Find the base object again to check edge distance
-  for (const other of allObjects) {
-    if (other.id === obj.id) continue;
-    if (!other.h_z || other.h_z === 0) continue;
-
-    const isWithinBounds =
-      objCenterX >= other.x &&
-      objCenterX <= other.x + other.w &&
-      objCenterY >= other.y &&
-      objCenterY <= other.y + other.h;
-
-    if (isWithinBounds && other.h_z === baseHeight) {
-      // Calculate distance from object center to nearest edge of base
-      const distToLeftEdge = Math.abs(objCenterX - other.x);
-      const distToRightEdge = Math.abs(objCenterX - (other.x + other.w));
-      const distToTopEdge = Math.abs(objCenterY - other.y);
-      const distToBottomEdge = Math.abs(objCenterY - (other.y + other.h));
-
-      const minEdgeDist = Math.min(
-        distToLeftEdge,
-        distToRightEdge,
-        distToTopEdge,
-        distToBottomEdge
-      );
-
-      // Calculate shadow length of the object on the roof
-      const relativeH = obj.h_z - baseHeight;
-      const objShadowLen = Math.sqrt(
-        Math.pow(shadowVector.x * relativeH, 2) +
-        Math.pow(shadowVector.y * relativeH, 2)
-      );
-
-      // If object shadow extends beyond the base edge, use absolute height
-      if (minEdgeDist < objShadowLen) {
-        return obj.h_z;
-      } else {
-        // Object shadow is contained on the roof, use relative height
-        return relativeH;
-      }
-    }
-  }
-
-  return obj.h_z; // Fallback to absolute height
+  // If it's a structure on a structure, the shadow calculation is complex.
+  // We typically just return relative height for the "roof shadow" and let the ground shadow be drawn by the parent?
+  // No, the parent draws its own shadow. The child needs to draw shadow for its relative height.
+  // BUT, if the child's shadow falls OFF the roof, it becomes a ground shadow (Full Height).
+  return obj.relative_h || 0;
 }
 
 /**
