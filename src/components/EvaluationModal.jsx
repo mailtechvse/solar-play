@@ -3,6 +3,7 @@ import { useSolarStore } from "../stores/solarStore";
 import { formatCurrency, formatEnergy } from "../utils/simulation";
 import Chart from "chart.js/auto";
 import { adminService } from "../lib/supabase";
+import { X, Lightbulb, Plus, BatteryFull, TriangleAlert, CloudSun, AlertCircle, CheckCircle2, Loader2, Bot, Download } from 'lucide-react';
 
 export default function EvaluationModal() {
   const isOpen = useSolarStore((state) => state.isEvaluationOpen);
@@ -405,7 +406,7 @@ export default function EvaluationModal() {
             onClick={() => setOpen(false)}
             className="text-gray-400 hover:text-white text-3xl"
           >
-            <i className="fas fa-times"></i>
+            <X className="w-8 h-8" />
           </button>
         </div>
 
@@ -498,7 +499,7 @@ export default function EvaluationModal() {
           {evaluationData.suggestions && evaluationData.suggestions.length > 0 && (
             <div className="bg-gray-700 p-4 rounded border-l-4 border-blue-500">
               <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                <i className="fas fa-lightbulb text-yellow-400"></i> Optimization Suggestions
+                <Lightbulb className="w-5 h-5 text-yellow-400" /> Optimization Suggestions
               </h3>
               <ul className="space-y-2">
                 {evaluationData.suggestions.map((suggestion, idx) => (
@@ -520,7 +521,7 @@ export default function EvaluationModal() {
                   onClick={() => setShowAddItem(!showAddItem)}
                   className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded transition"
                 >
-                  <i className="fas fa-plus mr-1"></i> Add Item
+                  <Plus className="w-4 h-4" /> Add Item
                 </button>
               </div>
 
@@ -539,7 +540,7 @@ export default function EvaluationModal() {
                       </div>
                     </div>
                     <div className="text-center">
-                      <i className="fas fa-battery-full text-2xl text-green-500"></i>
+                      <BatteryFull className="w-8 h-8 text-green-500" />
                     </div>
                   </div>
                 </div>
@@ -552,7 +553,7 @@ export default function EvaluationModal() {
                   <ul className="text-xs space-y-1 text-red-200">
                     {evaluationData.issues.map((issue, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <i className="fas fa-exclamation-triangle mt-0.5"></i>
+                        <TriangleAlert className="w-3 h-3 mt-0.5" />
                         <span>{issue}</span>
                       </li>
                     ))}
@@ -655,7 +656,7 @@ export default function EvaluationModal() {
                             className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-300 transition"
                             title="Remove/Reset"
                           >
-                            <i className="fas fa-times"></i>
+                            <X className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -676,7 +677,7 @@ export default function EvaluationModal() {
           {evaluationData.panelLosses && evaluationData.panelLosses.length > 0 && (
             <div className="bg-gray-700 p-4 rounded overflow-x-auto">
               <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                <i className="fas fa-cloud-sun text-yellow-400"></i> Per-Panel Shadow Analysis
+                <CloudSun className="w-5 h-5 text-yellow-400" /> Per-Panel Shadow Analysis
               </h3>
               <p className="text-xs text-gray-400 mb-2">
                 Detailed shadow report simulating micro-inverter level monitoring.
@@ -702,11 +703,11 @@ export default function EvaluationModal() {
                         </td>
                         <td className="text-right py-2 px-2">
                           {p.lossPct > 0.20 ? (
-                            <span className="text-red-500 font-bold"><i className="fas fa-exclamation-circle"></i> Critical</span>
+                            <span className="text-red-500 font-bold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> Critical</span>
                           ) : p.lossPct > 0.05 ? (
-                            <span className="text-yellow-500"><i className="fas fa-exclamation-triangle"></i> Warning</span>
+                            <span className="text-yellow-500 flex items-center gap-1"><TriangleAlert className="w-4 h-4" /> Warning</span>
                           ) : (
-                            <span className="text-green-500"><i className="fas fa-check-circle"></i> Good</span>
+                            <span className="text-green-500 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Good</span>
                           )}
                         </td>
                       </tr>
@@ -837,11 +838,11 @@ export default function EvaluationModal() {
               >
                 {isValidating ? (
                   <>
-                    <i className="fas fa-spinner fa-spin"></i> Validating...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Validating...
                   </>
                 ) : (
                   <>
-                    <i className="fas fa-robot"></i> Validate with AI
+                    <Bot className="w-4 h-4" /> Validate with AI
                   </>
                 )}
               </button>
@@ -874,7 +875,7 @@ export default function EvaluationModal() {
             {aiValidationResult && (
               <div className="mt-4 border-t border-gray-600 pt-4 animate-fade-in">
                 <h4 className="text-purple-300 font-bold mb-2 flex items-center gap-2">
-                  <i className="fas fa-robot"></i> AI Validation Report
+                  <Bot className="w-5 h-5" /> AI Validation Report
                 </h4>
                 <div className="bg-gray-800 p-3 rounded border border-purple-500/30">
                   <div className="flex justify-between items-start mb-2">
@@ -911,9 +912,9 @@ export default function EvaluationModal() {
           <div className="flex gap-3">
             <button
               onClick={downloadReport}
-              className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold transition"
+              className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold transition flex items-center justify-center gap-2"
             >
-              <i className="fas fa-download mr-2"></i>
+              <Download className="w-5 h-5" />
               Download Report
             </button>
             <button

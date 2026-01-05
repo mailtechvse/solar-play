@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { useSolarStore } from "../stores/solarStore";
+import {
+  X,
+  Trash2,
+  Info,
+  Settings,
+  Compass,
+  Layers,
+  Layout,
+  ObjectGroup,
+  ObjectUngroup,
+  Zap,
+  Battery,
+  Activity,
+  Maximize2,
+  Minimize2,
+  Trash
+} from 'lucide-react';
 
 export default function RightPanel() {
   const selectedObjectId = useSolarStore((state) => state.selectedObjectId);
@@ -51,7 +68,7 @@ export default function RightPanel() {
             onClick={() => setSelectedWireStore(null)}
             className="text-gray-400 hover:text-gray-600"
           >
-            <i className="fas fa-xmark"></i>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -61,15 +78,15 @@ export default function RightPanel() {
               <h3 className="text-gray-800 font-bold text-sm uppercase">{selectedWire.type} Cable</h3>
               <button
                 onClick={() => deleteWire(selectedWire.id)}
-                className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition"
+                className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition flex items-center gap-1"
               >
-                <i className="fas fa-trash"></i>
+                <Trash2 className="w-3 h-3" />
               </button>
             </div>
 
             <div className="bg-yellow-50 border border-yellow-100 p-3 rounded text-xs text-yellow-800">
               <h4 className="font-bold mb-1 flex items-center gap-1">
-                <i className="fas fa-info-circle"></i> Connection Info
+                <Info className="w-3 h-3" /> Connection Info
               </h4>
               <p className="leading-relaxed opacity-90">
                 Connecting two components. Ensure cable size is sufficient for the current rating.
@@ -202,8 +219,8 @@ export default function RightPanel() {
               </div>
             </div>
 
-            <div className="text-xs text-gray-400 italic">
-              <i className="fas fa-info-circle mr-1"></i>
+            <div className="text-xs text-gray-400 italic flex items-center gap-1">
+              <Info className="w-3 h-3" />
               Adjust north direction to align shadows correctly with the satellite map.
             </div>
           </div>
@@ -220,7 +237,7 @@ export default function RightPanel() {
           onClick={() => setSelectedObjectStore(null)}
           className="text-gray-400 hover:text-gray-600"
         >
-          <i className="fas fa-xmark"></i>
+          <X className="w-4 h-4" />
         </button>
       </div>
 
@@ -240,10 +257,10 @@ export default function RightPanel() {
             </div>
             <button
               onClick={() => deleteObject(selectedObject.id)}
-              className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition shrink-0"
+              className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded transition shrink-0 flex items-center justify-center"
               title="Delete Component"
             >
-              <i className="fas fa-trash"></i>
+              <Trash2 className="w-3 h-3" />
             </button>
           </div>
 
@@ -252,17 +269,17 @@ export default function RightPanel() {
             {(additionalSelectedIds?.length > 0) && (
               <button
                 onClick={() => groupObjects([selectedObject.id, ...additionalSelectedIds])}
-                className="flex-1 py-1.5 px-2 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-300 font-medium transition"
+                className="flex-1 py-1.5 px-2 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-300 font-medium transition flex items-center justify-center gap-1"
               >
-                <i className="fas fa-object-group mr-1"></i> Group Selected
+                <Maximize2 className="w-3 h-3" /> Group Selected
               </button>
             )}
             {selectedObject.groupId && (
               <button
                 onClick={() => ungroupObjects([selectedObject.id])}
-                className="flex-1 py-1.5 px-2 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-300 font-medium transition"
+                className="flex-1 py-1.5 px-2 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 rounded border border-gray-300 font-medium transition flex items-center justify-center gap-1"
               >
-                <i className="fas fa-object-ungroup mr-1"></i> Ungroup
+                <Minimize2 className="w-3 h-3" /> Ungroup
               </button>
             )}
           </div>
@@ -270,7 +287,7 @@ export default function RightPanel() {
           {/* Component Know-How / Description */}
           <div className="bg-blue-50 border border-blue-100 p-3 rounded text-xs text-blue-800">
             <h4 className="font-bold mb-1 flex items-center gap-1">
-              <i className="fas fa-info-circle"></i> What is this?
+              <Info className="w-3 h-3" /> What is this?
             </h4>
             <p className="leading-relaxed opacity-90">
               {getComponentDescription(selectedObject)}
@@ -871,7 +888,7 @@ export default function RightPanel() {
                           }}
                           className="text-gray-400 hover:text-red-500"
                         >
-                          <i className="fas fa-trash"></i>
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -1124,7 +1141,7 @@ export default function RightPanel() {
                           }}
                           className="text-gray-400 hover:text-red-500"
                         >
-                          <i className="fas fa-trash"></i>
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>

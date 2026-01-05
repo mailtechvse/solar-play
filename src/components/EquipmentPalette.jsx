@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useSolarStore } from "../stores/solarStore";
+import { Info, FileText } from 'lucide-react';
 
 export default function EquipmentPalette({ equipment }) {
   const [showDetails, setShowDetails] = useState(false);
@@ -59,9 +60,9 @@ export default function EquipmentPalette({ equipment }) {
             e.stopPropagation();
             setShowDetails(!showDetails);
           }}
-          className="px-2 py-1 text-xs bg-gray-300 hover:bg-gray-400 text-gray-800 rounded transition"
+          className="p-1 text-gray-400 hover:text-gray-600 rounded transition"
         >
-          <i className="fas fa-info-circle"></i>
+          <Info className="w-4 h-4" />
         </button>
       </div>
 
@@ -87,8 +88,8 @@ export default function EquipmentPalette({ equipment }) {
             </div>
           )}
           {equipment.spec_sheets && equipment.spec_sheets.length > 0 && (
-            <div className="text-xs text-blue-700">
-              <i className="fas fa-file-pdf mr-1"></i>
+            <div className="text-xs text-blue-700 flex items-center gap-1">
+              <FileText className="w-3 h-3" />
               {equipment.spec_sheets.length} spec sheet(s)
             </div>
           )}

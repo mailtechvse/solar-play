@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminService, equipmentService, operationsService, supabase } from '../lib/supabase';
+import { Plus, Trash2, ArrowLeft, Key, Plug, Download, Upload, ChevronUp, ChevronDown, Save, X, Edit2, Zap } from 'lucide-react';
 
 export default function AdminPage() {
     const navigate = useNavigate();
@@ -178,7 +179,7 @@ function OperationsTab() {
                             }}
                             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold"
                         >
-                            <i className="fas fa-plus mr-2"></i> Add Customer
+                            <Plus className="w-4 h-4" /> Add Customer
                         </button>
                     </div>
 
@@ -215,7 +216,7 @@ function OperationsTab() {
                                                     }}
                                                     className="text-red-400 hover:text-red-300"
                                                 >
-                                                    <i className="fas fa-trash"></i>
+                                                    <Trash2 className="w-4 h-4 text-red-400" />
                                                 </button>
                                             </td>
                                         </tr>
@@ -307,7 +308,7 @@ function CustomerDetailView({ customer, onBack }) {
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
             <div className="flex items-center gap-4 mb-6">
                 <button onClick={onBack} className="text-gray-400 hover:text-white">
-                    <i className="fas fa-arrow-left"></i> Back
+                    <ArrowLeft className="w-4 h-4" /> Back
                 </button>
                 <h2 className="text-2xl font-bold">{customer.name}</h2>
                 <span className="text-gray-500 text-sm">ID: {customer.id}</span>
@@ -382,7 +383,7 @@ function CustomerDetailView({ customer, onBack }) {
                             onClick={() => setShowAddDevice(true)}
                             className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-bold"
                         >
-                            <i className="fas fa-plus mr-2"></i> Add Device
+                            <Plus className="w-4 h-4" /> Add Device
                         </button>
                     </div>
                     <ul className="space-y-2">
@@ -425,7 +426,7 @@ function CustomerDetailView({ customer, onBack }) {
                                     <div className="text-xs text-gray-500">Endpoint: {int.api_endpoint || 'Default'}</div>
                                 </div>
                                 <button className="text-gray-500 hover:text-white text-sm" onClick={() => alert("Edit Keys feature coming soon")}>
-                                    <i className="fas fa-key"></i> Keys
+                                    <Key className="w-4 h-4" /> Keys
                                 </button>
                             </li>
                         ))}
@@ -669,7 +670,7 @@ function IntegrationsTab() {
                     </>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
-                        <i className="fas fa-plug text-4xl mb-4"></i>
+                        <Plug className="w-10 h-10 mb-4" />
                         <p>Select a manufacturer to configure keys</p>
                     </div>
                 )}
@@ -791,10 +792,10 @@ function ProductsTab({ products, taxSlabs, onUpdate }) {
                 <h2 className="text-xl font-bold">Product Management</h2>
                 <div className="flex gap-2">
                     <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-2">
-                        <i className="fas fa-download"></i> Export CSV
+                        <Download className="w-4 h-4" /> Export CSV
                     </button>
                     <label className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center gap-2 cursor-pointer">
-                        <i className="fas fa-upload"></i> Import CSV
+                        <Upload className="w-4 h-4" /> Import CSV
                         <input type="file" accept=".csv" onChange={handleImport} className="hidden" />
                     </label>
                 </div>
@@ -853,12 +854,12 @@ function ProductsTab({ products, taxSlabs, onUpdate }) {
                                     <td className="p-3">
                                         {isEditing ? (
                                             <div className="flex gap-2">
-                                                <button onClick={saveEdit} className="text-green-400 hover:text-green-300"><i className="fas fa-check"></i></button>
-                                                <button onClick={() => setEditingId(null)} className="text-red-400 hover:text-red-300"><i className="fas fa-times"></i></button>
+                                                <button onClick={saveEdit} className="text-green-400 hover:text-green-300"><Check className="w-4 h-4" /></button>
+                                                <button onClick={() => setEditingId(null)} className="text-red-400 hover:text-red-300"><X className="w-4 h-4" /></button>
                                             </div>
                                         ) : (
                                             <button onClick={() => startEdit(product)} className="text-blue-400 hover:text-blue-300">
-                                                <i className="fas fa-edit"></i>
+                                                <Edit2 className="w-4 h-4" />
                                             </button>
                                         )}
                                     </td>
@@ -919,7 +920,7 @@ function TaxSlabsTab({ taxSlabs, onUpdate }) {
                             <div className="text-2xl text-blue-400 font-bold">{slab.percentage}%</div>
                         </div>
                         <button onClick={() => handleDelete(slab.id)} className="text-red-400 hover:text-red-300">
-                            <i className="fas fa-trash"></i>
+                            <Trash2 className="w-4 h-4" />
                         </button>
                     </div>
                 ))}
@@ -990,7 +991,7 @@ function AdditionalItemsTab({ items, onUpdate }) {
                             ₹{(item.cost * (1 + (item.margin || 0) / 100)).toFixed(2)}
                         </div>
                         <button onClick={() => handleDelete(item.id)} className="text-red-400 hover:text-red-300">
-                            <i className="fas fa-trash"></i>
+                            <Trash2 className="w-4 h-4" />
                         </button>
                     </div>
                 ))}
@@ -1048,7 +1049,7 @@ function PlansTab({ plans, products, additionalItems, onUpdate }) {
                         className="bg-gray-700 border border-gray-600 rounded p-2 flex-1"
                     />
                     <button onClick={handleAddPlan} className="bg-blue-600 hover:bg-blue-700 rounded px-3">
-                        <i className="fas fa-plus"></i>
+                        <Plus className="w-4 h-4" />
                     </button>
                 </div>
                 <div className="space-y-2">
@@ -1092,7 +1093,7 @@ function PlansTab({ plans, products, additionalItems, onUpdate }) {
                                             <div key={pItem.id} className="flex justify-between items-center bg-gray-700 p-2 rounded">
                                                 <span>{name} ({pItem.item_type})</span>
                                                 <button onClick={() => handleRemoveItem(pItem.id)} className="text-red-400 hover:text-red-300">
-                                                    <i className="fas fa-times"></i>
+                                                    <X className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         );
@@ -1109,7 +1110,7 @@ function PlansTab({ plans, products, additionalItems, onUpdate }) {
                                     {products.map(prod => (
                                         <div key={prod.id} className="flex justify-between items-center text-xs p-1 hover:bg-gray-600 rounded cursor-pointer" onClick={() => handleAddItemToPlan('equipment', prod.id)}>
                                             <span>{prod.name}</span>
-                                            <i className="fas fa-plus text-green-400"></i>
+                                            <Plus className="w-3 h-3 text-green-400" />
                                         </div>
                                     ))}
                                 </div>
@@ -1120,7 +1121,7 @@ function PlansTab({ plans, products, additionalItems, onUpdate }) {
                                     {additionalItems.map(item => (
                                         <div key={item.id} className="flex justify-between items-center text-xs p-1 hover:bg-gray-600 rounded cursor-pointer" onClick={() => handleAddItemToPlan('additional', item.id)}>
                                             <span>{item.name}</span>
-                                            <i className="fas fa-plus text-green-400"></i>
+                                            <Plus className="w-3 h-3 text-green-400" />
                                         </div>
                                     ))}
                                 </div>

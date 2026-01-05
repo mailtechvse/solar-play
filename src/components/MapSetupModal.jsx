@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { supabase } from "../lib/supabase";
+import { Search, MapPin } from 'lucide-react';
 
 export default function MapSetupModal() {
     const isOpen = useSolarStore((state) => state.isMapSetupOpen);
@@ -243,7 +244,7 @@ export default function MapSetupModal() {
                                     placeholder="Search for a location..."
                                     disabled={!googleApiKey}
                                 />
-                                <i className="fas fa-search absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                             </div>
 
                             {/* Suggestions Dropdown */}
@@ -259,7 +260,7 @@ export default function MapSetupModal() {
                                             className="p-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
                                         >
                                             <div className="flex items-start gap-2">
-                                                <i className="fas fa-map-marker-alt text-red-500 mt-1"></i>
+                                                <MapPin className="text-red-500 mt-1 w-4 h-4" />
                                                 <div>
                                                     <div className="font-medium text-gray-800">
                                                         {suggestion.structured_formatting?.main_text || suggestion.description}
@@ -287,7 +288,7 @@ export default function MapSetupModal() {
                     <div className="bg-gray-50 p-2 rounded border border-gray-200">
                         <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">Current Location</div>
                         <div className="flex items-center gap-2 text-sm font-mono">
-                            <i className="fas fa-location-dot text-red-500"></i>
+                            <MapPin className="text-red-500 w-4 h-4" />
                             <span className="text-gray-700">
                                 {latitude.toFixed(4)}, {longitude.toFixed(4)}
                             </span>

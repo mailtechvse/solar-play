@@ -2,6 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { supabase } from '../lib/supabase';
+import {
+    BarChart,
+    Activity,
+    Zap,
+    Sun,
+    Battery,
+    Network,
+    Plus,
+    Cpu,
+    PencilRuler,
+    Info,
+    LayoutDashboard,
+    LucideIcon
+} from 'lucide-react';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement);
 
@@ -136,7 +150,7 @@ export default function OperationsPage() {
             {/* Sidebar for Customers */}
             <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
                 <div className="p-4 border-b border-gray-700 font-bold text-xl flex items-center gap-2">
-                    <i className="fas fa-solar-panel text-yellow-400"></i>
+                    <Sun className="text-yellow-400 w-6 h-6" />
                     Ops Center
                 </div>
                 <div className="p-4">
@@ -169,7 +183,7 @@ export default function OperationsPage() {
                             }}
                             className="w-full text-left p-2 rounded text-sm text-blue-400 hover:bg-gray-700 flex items-center gap-2"
                         >
-                            <i className="fas fa-plus"></i> New Customer
+                            <Plus className="w-4 h-4" /> New Customer
                         </button>
                     </div>
                 </div>
@@ -194,7 +208,7 @@ export default function OperationsPage() {
                             onClick={() => window.location.href = '/'}
                             className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm text-white flex items-center gap-2 border border-gray-600"
                         >
-                            <i className="fas fa-pencil-ruler"></i> Design Mode
+                            <PencilRuler className="w-4 h-4" /> Design Mode
                         </button>
                         <div className="h-6 w-px bg-gray-700"></div>
                         <span className="bg-green-500/10 text-green-400 px-3 py-1 rounded-full text-xs font-bold border border-green-500/20">
@@ -211,25 +225,25 @@ export default function OperationsPage() {
                         <MetricCard
                             label="Current Power"
                             value={`${metrics.currentPower.toFixed(2)} kW`}
-                            icon="fas fa-bolt"
+                            icon={Zap}
                             color="text-yellow-400"
                         />
                         <MetricCard
                             label="Daily Production"
                             value={`${metrics.dailyProduction.toFixed(2)} kWh`}
-                            icon="fas fa-sun"
+                            icon={Sun}
                             color="text-green-400"
                         />
                         <MetricCard
                             label="Battery SoC"
                             value={`${metrics.batterySoC.toFixed(0)}%`}
-                            icon="fas fa-battery-three-quarters"
+                            icon={Battery}
                             color="text-blue-400"
                         />
                         <MetricCard
                             label="Grid Export"
                             value={`${metrics.gridExport.toFixed(2)} kWh`}
-                            icon="fas fa-network-wired"
+                            icon={Network}
                             color="text-purple-400"
                         />
                     </div>
@@ -258,13 +272,13 @@ export default function OperationsPage() {
                                 onClick={() => setShowAddDevice(true)}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2"
                             >
-                                <i className="fas fa-plus"></i> Add Device
+                                <Plus className="w-4 h-4" /> Add Device
                             </button>
                         </div>
 
                         {devices.length === 0 ? (
                             <div className="text-center py-12 text-gray-500 bg-gray-900/50 rounded border border-gray-700 border-dashed">
-                                <i className="fas fa-microchip text-4xl mb-3"></i>
+                                <Cpu className="w-12 h-12 mb-3 text-gray-600 mx-auto" />
                                 <p>No Inverters or Meters connected yet.</p>
                                 <button onClick={() => setShowAddDevice(true)} className="text-blue-400 hover:underline mt-2">Connect a device</button>
                             </div>
@@ -291,11 +305,11 @@ export default function OperationsPage() {
     );
 }
 
-function MetricCard({ label, value, icon, color }) {
+function MetricCard({ label, value, icon: Icon, color }) {
     return (
         <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 flex items-center gap-4">
             <div className={`w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center text-xl ${color}`}>
-                <i className={icon}></i>
+                <Icon className="w-6 h-6" />
             </div>
             <div>
                 <p className="text-gray-400 text-xs uppercase font-bold">{label}</p>
@@ -308,8 +322,8 @@ function MetricCard({ label, value, icon, color }) {
 function DeviceCard({ device }) {
     return (
         <div className="bg-gray-900 p-4 rounded border border-gray-700 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-2 opacity-50 text-6xl text-gray-800 -rotate-12 pointer-events-none">
-                <i className="fas fa-solar-panel"></i>
+            <div className="absolute top-0 right-0 p-2 opacity-5 text-6xl text-gray-100 -rotate-12 pointer-events-none">
+                <Sun className="w-24 h-24" />
             </div>
             <div className="relative z-10">
                 <div className="flex justify-between items-start mb-2">
@@ -425,8 +439,8 @@ function AddDeviceModal({ onClose, onAdd, selectedCustomer }) {
                             onChange={e => setForm({ ...form, serial: e.target.value })}
                             placeholder="e.g. GT12345678"
                         />
-                        <p className="text-xs text-blue-400 mt-1">
-                            <i className="fas fa-info-circle"></i> Used to fetch API data
+                        <p className="text-xs text-blue-400 mt-1 flex items-center gap-1">
+                            <Info className="w-3 h-3" /> Used to fetch API data
                         </p>
                     </div>
                     <div>

@@ -3,6 +3,32 @@ import { useSolarStore } from "../stores/solarStore";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import ProjectsModal from "./ProjectsModal";
+import {
+  MapPin,
+  Search,
+  Target,
+  X,
+  Zap,
+  Activity,
+  CircleDollarSign,
+  LayoutGrid,
+  Sparkles,
+  Grid3X3,
+  Cloud,
+  MousePointer2,
+  Download,
+  Upload,
+  CloudUpload,
+  Undo2,
+  Redo2,
+  Sun,
+  Moon,
+  Coffee,
+  Trash2,
+  Play,
+  Settings2,
+  Navigation
+} from "lucide-react";
 
 export default function TopBar() {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
@@ -233,206 +259,197 @@ export default function TopBar() {
   const { profile } = useAuth();
 
   return (
-    <div className="flex flex-col shrink-0 z-20 shadow-md font-sans">
-      <div className="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4">
-        {/* Logo & Title */}
-        <div className="flex items-center gap-3">
-          <div className="bg-yellow-500 p-1.5 rounded text-gray-900">
-            <i className="fas fa-solar-panel text-lg"></i>
-          </div>
-          <div>
-            <h1 className="font-bold text-lg leading-none text-white">Solar Architect</h1>
-            <div className="text-xs text-gray-400">Grid Master v5.0</div>
-          </div>
-        </div>
+    <div className="flex flex-col shrink-0 z-20 shadow-xl font-sans">
+      <div className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 gap-4">
 
-        {/* Location Settings with Search */}
-        <div className="flex items-center gap-2 bg-gray-700 px-3 py-1 rounded border border-gray-600 relative">
-          <i className="fas fa-location-dot text-red-400 text-xs"></i>
-          <div className="flex flex-col">
-            <span className="text-[8px] text-gray-400 uppercase font-bold">Location</span>
-            <div className="flex gap-1 items-center">
-              {/* Search Input */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setSearchTerm(e.target.value);
-                  }}
-                  onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
-                  placeholder="Search place..."
-                  className="w-32 bg-gray-600 text-xs text-white border-b border-gray-500 focus:border-blue-400 outline-none px-1 py-0.5 rounded"
-                />
-                {isSearching && (
-                  <i className="fas fa-spinner fa-spin absolute right-1 top-1.5 text-blue-400 text-xs"></i>
-                )}
-
-                {/* Search Results Dropdown */}
-                {showSearchResults && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded max-h-48 overflow-y-auto z-50">
-                    {searchResults.map((result, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleSelectLocation(result)}
-                        className="w-full text-left px-2 py-1 text-xs text-gray-300 hover:bg-blue-600 hover:text-white border-b border-gray-700 last:border-b-0 transition"
-                        title={result.formatted_address || result.name}
-                      >
-                        <div className="truncate">{result.name}</div>
-                        <div className="text-[10px] text-gray-500 truncate">{result.formatted_address}</div>
-                      </button>
-                    ))}
+        {/* LEFT SECTION: Branding & Location */}
+        <div className="flex items-center gap-6 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase mb-1">Grid Master v5.0</span>
+              <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700 focus-within:border-blue-500 transition-all group relative">
+                <MapPin size={14} className="text-blue-400 group-hover:scale-110 transition-transform" />
+                <div className="flex flex-col min-w-[120px]">
+                  <div className="flex gap-1 items-center relative">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setSearchTerm(e.target.value);
+                      }}
+                      onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
+                      placeholder="Search location..."
+                      className="bg-transparent text-xs text-slate-200 outline-none w-full placeholder:text-slate-600"
+                    />
+                    {isSearching ? (
+                      <div className="animate-spin h-3 w-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full" />
+                    ) : (
+                      <Search size={12} className="text-slate-600" />
+                    )}
                   </div>
-                )}
+
+                  {/* Search Results Dropdown */}
+                  {showSearchResults && searchResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-md">
+                      {searchResults.map((result, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSelectLocation(result)}
+                          className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-blue-600/20 hover:text-white border-b border-slate-700/50 last:border-b-0 transition-colors"
+                        >
+                          <div className="font-medium truncate">{result.name}</div>
+                          <div className="text-[10px] text-slate-500 truncate">{result.formatted_address}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-1 ml-2 border-l border-slate-700 pl-2">
+                  <button onClick={handleAutoDetectLocation} className="text-slate-500 hover:text-blue-400 p-0.5" title="Auto-detect">
+                    <Target size={14} />
+                  </button>
+                  <button onClick={() => { setSearchQuery(""); setSearchTerm(""); setShowSearchResults(false); }} className="text-slate-500 hover:text-red-400 p-0.5" title="Clear">
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
-
-              {/* Coordinates Display/Edit */}
-              <input
-                type="number"
-                value={latitude}
-                onChange={(e) => setLatitude(parseFloat(e.target.value))}
-                className="w-12 bg-transparent text-xs text-white font-mono border-b border-gray-500 focus:border-blue-400 outline-none"
-                placeholder="Lat"
-                title="Latitude"
-              />
-              <input
-                type="number"
-                value={longitude}
-                onChange={(e) => setLongitude(parseFloat(e.target.value))}
-                className="w-12 bg-transparent text-xs text-white font-mono border-b border-gray-500 focus:border-blue-400 outline-none"
-                placeholder="Lon"
-                title="Longitude"
-              />
-
-              {/* Action Buttons */}
-              <button
-                onClick={handleAutoDetectLocation}
-                className="text-blue-400 hover:text-blue-300 ml-1"
-                title="Detect My Location"
-              >
-                <i className="fas fa-crosshairs"></i>
-              </button>
-              <button
-                onClick={() => setShowSearchResults(false)}
-                className="text-gray-400 hover:text-gray-300 text-[10px]"
-                title="Close search"
-              >
-                <i className="fas fa-times"></i>
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-6 text-sm font-mono bg-gray-900/50 px-4 py-1 rounded-lg border border-gray-700">
-          <div className="flex flex-col items-center w-24">
-            <span className="text-gray-500 text-[10px] uppercase tracking-wider">DC Capacity</span>
-            <span className="text-yellow-400 font-bold">{stats.dcCapacity.toFixed(2)} kWp</span>
+        {/* CENTER SECTION: Stats Cards */}
+        <div className="flex items-center gap-3 bg-slate-800/30 p-1 rounded-xl border border-slate-800/50 backdrop-blur-sm shadow-inner">
+          <div className="flex items-center gap-3 px-4 py-1.5 rounded-lg bg-yellow-500/5 border border-yellow-500/10">
+            <Zap size={18} className="text-yellow-500" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold leading-tight">DC Capacity</span>
+              <span className="text-sm font-mono font-bold text-yellow-400 leading-none">{stats.dcCapacity.toFixed(2)} <span className="text-[10px] opacity-70">kWp</span></span>
+            </div>
           </div>
-          <div className="w-px bg-gray-700 h-8"></div>
-          <div className="flex flex-col items-center w-24">
-            <span className="text-gray-500 text-[10px] uppercase tracking-wider">AC Output</span>
-            <span className="text-blue-400 font-bold">{stats.acOutput.toFixed(2)} kW</span>
+
+          <div className="w-px h-8 bg-slate-700/50" />
+
+          <div className="flex items-center gap-3 px-4 py-1.5 rounded-lg bg-blue-500/5 border border-blue-500/10">
+            <Activity size={18} className="text-blue-500" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold leading-tight">AC Output</span>
+              <span className="text-sm font-mono font-bold text-blue-400 leading-none">{stats.acOutput.toFixed(2)} <span className="text-[10px] opacity-70">kW</span></span>
+            </div>
           </div>
-          <div className="w-px bg-gray-700 h-8"></div>
-          <div className="flex flex-col items-center w-24">
-            <span className="text-gray-500 text-[10px] uppercase tracking-wider">Est. Cost</span>
-            <span className="text-green-400 font-bold">₹{(stats.estimatedCost).toLocaleString()}</span>
+
+          <div className="w-px h-8 bg-slate-700/50" />
+
+          <div className="flex items-center gap-3 px-4 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+            <CircleDollarSign size={18} className="text-emerald-500" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold leading-tight">Est. Cost</span>
+              <span className="text-sm font-mono font-bold text-emerald-400 leading-none">₹{stats.estimatedCost.toLocaleString()}</span>
+            </div>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex gap-3 items-center">
+        {/* RIGHT SECTION: Controls & Actions */}
+        <div className="flex items-center gap-3 shrink-0">
 
-
-          {/* Grid & Cable */}
-          <div className="flex items-center gap-2 mr-2">
+          {/* Group 1: Modes & Views */}
+          <div className="flex items-center gap-1 bg-slate-800/40 p-1 rounded-xl border border-slate-800">
             <button
-              // Navigate using window.location or Link if Router context available (it is)
               onClick={() => window.location.href = '/operations'}
-              className="text-xs px-3 py-1 rounded text-white border border-blue-500 bg-blue-900/50 hover:bg-blue-800 flex items-center gap-2 font-bold shadow-sm shadow-blue-500/20 transition"
-              title="Switch to Operations Dashboard"
+              className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
+              title="Operations Dashboard"
             >
-              <i className="fas fa-chart-line"></i> Operations
+              <LayoutGrid size={18} />
             </button>
             <button
               onClick={() => setAiImportMode(!aiImportMode)}
-              className={`text-xs px-2 py-1 rounded text-white border border-gray-600 flex items-center gap-2 ${aiImportMode ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-700 hover:bg-gray-600'}`}
-              title="Click on a building on the map to import it"
+              className={`p-1.5 rounded-lg transition-all ${aiImportMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+              title="AI Map Import"
             >
-              <i className="fas fa-magic"></i> AI Import
+              <Sparkles size={18} />
             </button>
+            <div className="w-px h-4 bg-slate-700 mx-1" />
             <button
               onClick={() => setShowGrid(!showGrid)}
-              className={`text-xs px-2 py-1 rounded text-white border border-gray-600 flex items-center gap-2 ${showGrid ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'}`}
+              className={`p-1.5 rounded-lg transition-all ${showGrid ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+              title="Toggle Grid"
             >
-              <i className="fas fa-border-all"></i> Grid
+              <Grid3X3 size={18} />
             </button>
             <button
               onClick={() => setShowWeatherPanel(!showWeatherPanel)}
-              className={`text-xs px-2 py-1 rounded text-white border border-gray-600 flex items-center gap-2 ${showWeatherPanel ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'}`}
+              className={`p-1.5 rounded-lg transition-all ${showWeatherPanel ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+              title="Weather Insight"
             >
-              <i className="fas fa-cloud"></i> Weather
+              <Cloud size={18} />
             </button>
             <button
               onClick={() => setCableMode(cableMode === 'straight' ? 'ortho' : 'straight')}
-              className="text-xs bg-gray-700 px-2 py-1 rounded text-white border border-gray-600 hover:bg-gray-600 flex items-center gap-2"
+              className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 px-2 ${cableMode === 'ortho' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+              title="Wiring Mode"
             >
-              <i className="fas fa-bezier-curve"></i> {cableMode === 'straight' ? 'Straight' : 'Ortho'}
+              <Navigation size={14} className={cableMode === 'ortho' ? 'rotate-90' : ''} />
+              <span className="text-[10px] font-bold uppercase">{cableMode === 'straight' ? 'Direct' : 'Ortho'}</span>
             </button>
           </div>
 
-          {/* File Operations */}
-          <div className="flex bg-gray-700 rounded border border-gray-600 mr-2">
-            <button onClick={handleSaveLocal} className="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white" title="Save JSON">
-              <i className="fas fa-download"></i>
+          {/* Group 2: Project Management */}
+          <div className="flex items-center gap-1 bg-slate-800/40 p-1 rounded-xl border border-slate-800">
+            <button onClick={handleSaveLocal} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-all" title="Download Project">
+              <Download size={18} />
             </button>
-            <button onClick={() => document.getElementById('file-input')?.click()} className="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white" title="Load JSON">
-              <i className="fas fa-upload"></i>
+            <button onClick={() => document.getElementById('file-input')?.click()} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-all" title="Upload Project">
+              <Upload size={18} />
             </button>
-            <button onClick={() => setShowProjectsModal(true)} className="px-3 py-1 hover:bg-gray-600 transition text-white" title="Cloud Projects">
-              <i className="fas fa-cloud"></i>
+            <button onClick={() => setShowProjectsModal(true)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-all" title="Cloud Library">
+              <CloudUpload size={18} />
             </button>
             <input type="file" id="file-input" hidden accept=".json" onChange={handleLoadLocal} />
-          </div>
-
-          {/* Undo/Redo */}
-          <div className="flex bg-gray-700 rounded border border-gray-600 mr-2">
-            <button onClick={undo} className="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white" title="Undo">
-              <i className="fas fa-rotate-left"></i>
+            <div className="w-px h-4 bg-slate-700 mx-1" />
+            <button onClick={undo} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-all" title="Undo">
+              <Undo2 size={18} />
             </button>
-            <button onClick={redo} className="px-3 py-1 hover:bg-gray-600 transition text-white" title="Redo">
-              <i className="fas fa-rotate-right"></i>
+            <button onClick={redo} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-all" title="Redo">
+              <Redo2 size={18} />
             </button>
           </div>
 
-          {/* Themes */}
-          <div className="flex bg-gray-700 rounded border border-gray-600 mr-2">
-            <button onClick={() => setTheme('dark')} className="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white" title="Dark Mode">
-              <i className="fas fa-moon"></i>
+          {/* Group 3: Appearance & Actions */}
+          <div className="flex items-center gap-2 ml-2">
+            <div className="flex items-center bg-slate-800/40 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setTheme('dark')}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-400 transition-all"
+                title="Dark Theme"
+              >
+                <Moon size={16} />
+              </button>
+              <button
+                onClick={() => setTheme('light')}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-yellow-400 transition-all"
+                title="Light Theme"
+              >
+                <Sun size={16} />
+              </button>
+            </div>
+
+            <button
+              onClick={() => { if (confirm("Proceed to reset the entire project canvas?")) clearProject(); }}
+              className="p-2 rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all border border-transparent hover:border-red-500/20"
+              title="Clear Canvas"
+            >
+              <Trash2 size={18} />
             </button>
-            <button onClick={() => setTheme('light')} className="px-3 py-1 hover:bg-gray-600 border-r border-gray-600 transition text-white" title="Light Mode">
-              <i className="fas fa-sun"></i>
-            </button>
-            <button onClick={() => setTheme('sepia')} className="px-3 py-1 hover:bg-gray-600 transition text-white" title="Sepia Mode">
-              <i className="fas fa-mug-hot"></i>
+
+            <button
+              onClick={() => runEvaluation(gridRate, baseLoad, systemCost, isCommercial)}
+              className="h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 group border border-blue-400/20"
+            >
+              <Play size={16} className="group-hover:translate-x-0.5 transition-transform" />
+              <span>Evaluate</span>
             </button>
           </div>
-
-          {/* Actions */}
-          <button
-            onClick={() => { if (confirm("Clear project?")) clearProject(); }}
-            className="bg-gray-700 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition border border-gray-600"
-          >
-            <i className="fas fa-trash"></i> Clear
-          </button>
-          <button
-            onClick={() => runEvaluation(gridRate, baseLoad, systemCost, isCommercial)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded text-sm font-bold shadow-lg shadow-green-900/50 transition flex items-center gap-2 border border-green-500"
-          >
-            <i className="fas fa-play"></i> Evaluate
-          </button>
         </div>
 
         {/* Projects Modal */}
@@ -440,17 +457,28 @@ export default function TopBar() {
       </div>
 
       {/* Shortcuts Bar */}
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-1 flex gap-4 text-[10px] text-gray-400 font-mono overflow-x-auto whitespace-nowrap shrink-0">
-        <span className="font-bold text-gray-500 uppercase">Shortcuts:</span>
-        <span><span className="text-yellow-500">[V]</span> Select</span>
-        <span><span className="text-yellow-500">[M]</span> Measure</span>
-        <span><span className="text-yellow-500">[D]</span> Delete</span>
-        <span><span className="text-yellow-500">[W]</span> DC Wire</span>
-        <span><span className="text-yellow-500">[A]</span> AC Wire</span>
-        <span><span className="text-yellow-500">[G]</span> Earthing</span>
-        <span><span className="text-yellow-500">[R]</span> Rotate</span>
-        <span><span className="text-yellow-500">[Ctrl+S]</span> Save</span>
-        <span><span className="text-yellow-500">[Del]</span> Remove Item</span>
+      <div className="bg-slate-800/50 border-b border-slate-800/80 px-4 py-1.5 flex items-center gap-6 overflow-x-auto whitespace-nowrap hide-scrollbar backdrop-blur-sm transition-all">
+        <div className="flex items-center gap-2 shrink-0">
+          <Settings2 size={12} className="text-slate-500" />
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Master Shortcuts</span>
+        </div>
+        <div className="flex gap-4 items-center">
+          {[
+            { k: 'V', l: 'Select' },
+            { k: 'M', l: 'Measure' },
+            { k: 'D', l: 'Delete' },
+            { k: 'W', l: 'DC Wire' },
+            { k: 'A', l: 'AC Wire' },
+            { k: 'G', l: 'Earthing' },
+            { k: 'R', l: 'Rotate' },
+            { k: 'Ctrl+S', l: 'Save' }
+          ].map(s => (
+            <div key={s.k} className="flex items-center gap-1.5 group cursor-default">
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-700/50 text-slate-400 text-[9px] font-mono group-hover:text-blue-400 transition-colors border border-slate-700">{s.k}</span>
+              <span className="text-[9px] text-slate-600 group-hover:text-slate-400 transition-colors">{s.l}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

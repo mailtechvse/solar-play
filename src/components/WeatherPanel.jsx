@@ -1,5 +1,6 @@
 import React from "react";
 import { useSolarStore } from "../stores/solarStore";
+import { Cloud, X, Loader2, Sunrise, Sunset, Info } from 'lucide-react';
 
 export default function WeatherPanel() {
   const weather = useSolarStore((state) => state.weather);
@@ -14,14 +15,14 @@ export default function WeatherPanel() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <h3 className="text-white font-semibold flex items-center gap-2">
-          <i className="fas fa-cloud"></i> Weather Information
+          <Cloud className="w-5 h-5 text-blue-400" /> Weather Information
         </h3>
         <button
           onClick={() => setShowWeatherPanel(false)}
           className="text-gray-400 hover:text-white transition"
           title="Close panel"
         >
-          <i className="fas fa-times"></i>
+          <X className="w-5 h-5" />
         </button>
       </div>
 
@@ -30,7 +31,7 @@ export default function WeatherPanel() {
         {isLoadingWeather ? (
           <div className="text-center py-4">
             <div className="text-gray-400 flex items-center justify-center gap-2">
-              <i className="fas fa-spinner fa-spin"></i>
+              <Loader2 className="w-5 h-5 animate-spin" />
               <span>Loading weather...</span>
             </div>
           </div>
@@ -81,12 +82,12 @@ export default function WeatherPanel() {
                     {weather.current.cloudcover === 0
                       ? "Clear Sky"
                       : weather.current.cloudcover < 25
-                      ? "Mostly Clear"
-                      : weather.current.cloudcover < 50
-                      ? "Partly Cloudy"
-                      : weather.current.cloudcover < 75
-                      ? "Mostly Cloudy"
-                      : "Overcast"}
+                        ? "Mostly Clear"
+                        : weather.current.cloudcover < 50
+                          ? "Partly Cloudy"
+                          : weather.current.cloudcover < 75
+                            ? "Mostly Cloudy"
+                            : "Overcast"}
                   </div>
                 </div>
               </>
@@ -98,8 +99,8 @@ export default function WeatherPanel() {
                 <div className="text-gray-400 text-xs mb-2">Sunrise & Sunset</div>
                 {weather.daily.sunrise && weather.daily.sunrise[0] && (
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">
-                      <i className="fas fa-sunrise mr-1"></i>Sunrise
+                    <span className="text-gray-400 flex items-center gap-1">
+                      <Sunrise className="w-4 h-4 text-orange-400" /> Sunrise
                     </span>
                     <span className="text-white">
                       {new Date(weather.daily.sunrise[0]).toLocaleTimeString([], {
@@ -111,8 +112,8 @@ export default function WeatherPanel() {
                 )}
                 {weather.daily.sunset && weather.daily.sunset[0] && (
                   <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="text-gray-400">
-                      <i className="fas fa-sunset mr-1"></i>Sunset
+                    <span className="text-gray-400 flex items-center gap-1">
+                      <Sunset className="w-4 h-4 text-amber-500" /> Sunset
                     </span>
                     <span className="text-white">
                       {new Date(weather.daily.sunset[0]).toLocaleTimeString([], {
@@ -126,13 +127,15 @@ export default function WeatherPanel() {
             )}
 
             {/* Impact Note */}
-            <div className="pt-2 border-t border-gray-700 bg-gray-900 p-2 rounded text-xs text-gray-300">
-              <i className="fas fa-info-circle mr-1 text-blue-400"></i>
-              {weather.current?.cloudcover < 25
-                ? "Excellent conditions for solar generation"
-                : weather.current?.cloudcover < 50
-                ? "Good solar potential with some clouds"
-                : "Cloud cover may reduce panel output"}
+            <div className="pt-2 border-t border-gray-700 bg-gray-850 p-2 rounded text-xs text-gray-300 flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-400 shrink-0" />
+              <span>
+                {weather.current?.cloudcover < 25
+                  ? "Excellent conditions for solar generation"
+                  : weather.current?.cloudcover < 50
+                    ? "Good solar potential with some clouds"
+                    : "Cloud cover may reduce panel output"}
+              </span>
             </div>
           </>
         ) : (

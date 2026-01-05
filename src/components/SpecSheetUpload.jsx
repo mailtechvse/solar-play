@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { equipmentService, specSheetService } from "../lib/supabase";
 import { useSolarStore } from "../stores/solarStore";
+import { Loader2, UploadCloud } from 'lucide-react';
 
 export default function SpecSheetUpload() {
   const [selectedEquipment, setSelectedEquipment] = useState(null);
@@ -132,16 +133,16 @@ export default function SpecSheetUpload() {
       <button
         onClick={handleUpload}
         disabled={!selectedEquipment || !file || uploading}
-        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded transition"
+        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded transition flex items-center justify-center"
       >
         {uploading ? (
           <>
-            <i className="fas fa-spinner fa-spin mr-2"></i>
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
             Analyzing...
           </>
         ) : (
           <>
-            <i className="fas fa-cloud-upload-alt mr-2"></i>
+            <UploadCloud className="w-4 h-4 mr-2" />
             Upload & Analyze
           </>
         )}
@@ -149,11 +150,10 @@ export default function SpecSheetUpload() {
 
       {/* Status */}
       {uploadStatus && (
-        <div className={`px-3 py-2 rounded text-sm ${
-          uploadStatus.includes("Error")
+        <div className={`px-3 py-2 rounded text-sm ${uploadStatus.includes("Error")
             ? "bg-red-900 text-red-200"
             : "bg-blue-900 text-blue-200"
-        }`}>
+          }`}>
           {uploadStatus}
         </div>
       )}

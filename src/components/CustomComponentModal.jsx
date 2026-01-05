@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { equipmentService, supabase } from "../lib/supabase";
+import { Loader2, Sparkles, X, FileMinus, Upload, Trash2, Plus } from 'lucide-react';
 
 export default function CustomComponentModal() {
   const isOpen = useSolarStore((state) => state.isCustomComponentOpen);
@@ -250,7 +251,7 @@ export default function CustomComponentModal() {
         {/* Loader Overlay */}
         {isUploading && (
           <div className="absolute inset-0 bg-gray-900 bg-opacity-80 flex flex-col items-center justify-center z-10 rounded-lg">
-            <i className="fas fa-circle-notch fa-spin text-4xl text-blue-500 mb-3"></i>
+            <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-3" />
             <p className="text-white font-medium">Analyzing Datasheet...</p>
             <p className="text-gray-400 text-xs mt-1">Extracting specifications with Gemini AI</p>
           </div>
@@ -261,7 +262,7 @@ export default function CustomComponentModal() {
           <div className="animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-white">Batch Import Models</h2>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-white text-2xl"><i className="fas fa-times"></i></button>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-white"><X className="w-6 h-6" /></button>
             </div>
 
             <p className="text-gray-300 text-sm mb-4">
@@ -360,7 +361,7 @@ export default function CustomComponentModal() {
                 disabled={loading || importCandidates.filter(c => c.selected).length === 0}
                 className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold rounded transition shadow-lg flex items-center"
               >
-                {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-file-import mr-2"></i>}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
                 Import {importCandidates.filter(c => c.selected).length} Models
               </button>
             </div>
@@ -374,7 +375,7 @@ export default function CustomComponentModal() {
                 onClick={() => setOpen(false)}
                 className="text-gray-400 hover:text-white text-2xl"
               >
-                <i className="fas fa-times"></i>
+                <X className="w-6 h-6" />
               </button>
             </div>
 
@@ -382,7 +383,7 @@ export default function CustomComponentModal() {
               {/* File Upload for Auto-fill */}
               <div className="mb-6 p-4 bg-gray-700 rounded border border-gray-600">
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  <i className="fas fa-magic text-yellow-400 mr-2"></i>
+                  <Sparkles className="w-4 h-4 text-yellow-400 mr-2" />
                   Auto-fill from Datasheet (Gemini AI)
                 </label>
                 <div className="flex items-center gap-2">
@@ -688,7 +689,7 @@ export default function CustomComponentModal() {
                           }}
                           className="text-red-400 hover:text-red-300"
                         >
-                          <i className="fas fa-trash text-xs"></i>
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     );
@@ -714,7 +715,7 @@ export default function CustomComponentModal() {
                     onClick={handleAddSpec}
                     className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition"
                   >
-                    <i className="fas fa-plus"></i>
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -728,12 +729,12 @@ export default function CustomComponentModal() {
                 >
                   {loading ? (
                     <>
-                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       Creating...
                     </>
                   ) : (
                     <>
-                      <i className="fas fa-plus mr-2"></i>
+                      <Plus className="w-4 h-4 mr-2" />
                       Create & Add
                     </>
                   )}

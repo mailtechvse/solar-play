@@ -1,5 +1,11 @@
 import React from "react";
 import { useSolarStore } from "../stores/solarStore";
+import {
+  Square,
+  Pentagon,
+  PenTool,
+  X
+} from 'lucide-react';
 
 export default function DrawingToolbar() {
   const drawingMode = useSolarStore((state) => state.drawingMode);
@@ -26,42 +32,39 @@ export default function DrawingToolbar() {
       {/* Rectangle Tool */}
       <button
         onClick={() => handleToolClick("rectangle")}
-        className={`px-3 py-2 rounded text-sm transition flex items-center gap-2 ${
-          drawingMode === "rectangle"
+        className={`px-3 py-2 rounded text-sm transition flex items-center gap-2 ${drawingMode === "rectangle"
             ? "bg-blue-600 text-white"
             : "bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white"
-        }`}
+          }`}
         title="Draw Rectangle - Click and drag to create rectangular structures"
       >
-        <i className="fas fa-square"></i>
+        <Square className="w-4 h-4" />
         <span>Rectangle</span>
       </button>
 
       {/* Polygon Tool */}
       <button
         onClick={() => handleToolClick("polygon")}
-        className={`px-3 py-2 rounded text-sm transition flex items-center gap-2 ${
-          drawingMode === "polygon"
+        className={`px-3 py-2 rounded text-sm transition flex items-center gap-2 ${drawingMode === "polygon"
             ? "bg-blue-600 text-white"
             : "bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white"
-        }`}
+          }`}
         title="Draw Polygon - Click to place points, double-click to finish"
       >
-        <i className="fas fa-draw-polygon"></i>
+        <Pentagon className="w-4 h-4" />
         <span>Polygon</span>
       </button>
 
       {/* Freehand Tool */}
       <button
         onClick={() => handleToolClick("freehand")}
-        className={`px-3 py-2 rounded text-sm transition flex items-center gap-2 ${
-          drawingMode === "freehand"
+        className={`px-3 py-2 rounded text-sm transition flex items-center gap-2 ${drawingMode === "freehand"
             ? "bg-blue-600 text-white"
             : "bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white"
-        }`}
+          }`}
         title="Draw Freehand - Click and drag to draw freely, release to finish"
       >
-        <i className="fas fa-pen"></i>
+        <PenTool className="w-4 h-4" />
         <span>Freehand</span>
       </button>
 
@@ -94,9 +97,9 @@ export default function DrawingToolbar() {
           {/* Cancel Button */}
           <button
             onClick={clearDrawing}
-            className="w-full mt-2 px-2 py-1 bg-red-700 hover:bg-red-800 text-white text-xs rounded transition"
+            className="w-full mt-2 px-2 py-2 bg-red-700 hover:bg-red-800 text-white text-xs rounded transition flex items-center justify-center gap-1 font-bold"
           >
-            Cancel
+            <X className="w-3 h-3" /> Cancel
           </button>
         </div>
       )}

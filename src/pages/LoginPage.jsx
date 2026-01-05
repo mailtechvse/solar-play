@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const { signInWithGoogle, loading, error } = useAuth();
@@ -20,26 +21,26 @@ export default function LoginPage() {
     <div className="flex items-center justify-center w-full h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-blue-900">
       <div className="text-center">
         {/* Logo and Title */}
-        <div className="mb-8">
-          <div className="text-6xl mb-4">☀️</div>
-          <h1 className="text-4xl font-bold text-white mb-2">
+        <div className="mb-8 p-3 scale-110">
+          <div className="text-7xl mb-4 animate-bounce">☀️</div>
+          <h1 className="text-5xl font-extrabold text-white mb-2 tracking-tight">
             Solar Architect
           </h1>
-          <p className="text-gray-400 text-lg">Grid Master v5.0</p>
+          <p className="text-blue-300 text-xl font-medium tracking-widest uppercase">Grid Master v5.0</p>
         </div>
 
         {/* Card */}
-        <div className="bg-gray-800 rounded-xl shadow-2xl p-8 max-w-md w-full">
-          <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
+        <div className="bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-10 max-w-md w-full border border-gray-700/50">
+          <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
           <p className="text-gray-400 mb-8">
             Sign in to design and simulate solar systems
           </p>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-900 border border-red-700 rounded-lg">
-              <p className="text-red-200 text-sm">
-                <i className="fas fa-exclamation-circle mr-2"></i>
+            <div className="mb-6 p-4 bg-red-900/50 border border-red-700/50 rounded-xl">
+              <p className="text-red-200 text-sm flex items-center justify-center gap-2">
+                <AlertCircle className="w-4 h-4" />
                 {error}
               </p>
             </div>
@@ -49,10 +50,10 @@ export default function LoginPage() {
           <button
             onClick={handleGoogleSignIn}
             disabled={loading || isLoading}
-            className="w-full px-6 py-3 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 font-semibold rounded-lg transition flex items-center justify-center gap-3 group"
+            className="w-full px-8 py-4 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 font-bold rounded-xl transition-all flex items-center justify-center gap-4 group shadow-xl hover:shadow-white/10 active:scale-95"
           >
             <svg
-              className="w-5 h-5"
+              className="w-6 h-6 transition-transform group-hover:scale-110"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -75,46 +76,41 @@ export default function LoginPage() {
               />
             </svg>
             {isLoading || loading ? (
-              <>
-                <span className="inline-block animate-spin">
-                  <i className="fas fa-spinner"></i>
-                </span>
-                Signing in...
-              </>
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Signing in...</span>
+              </div>
             ) : (
-              <>
-                Continue with Google
-              </>
+              <span>Continue with Google</span>
             )}
           </button>
 
           {/* Info Text */}
-          <div className="mt-8 pt-8 border-t border-gray-700">
-            <p className="text-gray-400 text-sm mb-4">
-              By signing in, you agree to our Terms of Service and Privacy
-              Policy
+          <div className="mt-10 pt-10 border-t border-gray-700/50">
+            <p className="text-gray-500 text-xs mb-6 px-4 leading-relaxed">
+              By signing in, you agree to our <span className="text-blue-400 hover:underline cursor-pointer">Terms of Service</span> and <span className="text-blue-400 hover:underline cursor-pointer">Privacy Policy</span>
             </p>
-            <div className="grid grid-cols-3 gap-4 text-center text-xs">
-              <div>
-                <div className="text-2xl mb-1">🎨</div>
-                <p className="text-gray-400">Design</p>
+            <div className="grid grid-cols-3 gap-6 text-center text-xs">
+              <div className="group">
+                <div className="text-3xl mb-1 group-hover:scale-125 transition-transform">🎨</div>
+                <p className="text-gray-500 font-bold uppercase tracking-tighter">Design</p>
               </div>
-              <div>
-                <div className="text-2xl mb-1">📊</div>
-                <p className="text-gray-400">Simulate</p>
+              <div className="group">
+                <div className="text-3xl mb-1 group-hover:scale-125 transition-transform">📊</div>
+                <p className="text-gray-500 font-bold uppercase tracking-tighter">Simulate</p>
               </div>
-              <div>
-                <div className="text-2xl mb-1">💾</div>
-                <p className="text-gray-400">Save</p>
+              <div className="group">
+                <div className="text-3xl mb-1 group-hover:scale-125 transition-transform">💾</div>
+                <p className="text-gray-500 font-bold uppercase tracking-tighter">Save</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-8">
-          <p className="text-gray-500 text-sm">
-            Solar Architect © 2024 | Grid Master v5.0
+        <div className="mt-12">
+          <p className="text-gray-500 text-sm font-medium">
+            Solar Architect © 2024 | <span className="text-gray-400">Developed by DeepMind Agentic Team</span>
           </p>
         </div>
       </div>

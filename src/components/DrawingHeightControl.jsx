@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSolarStore } from "../stores/solarStore";
+import { Box, Lightbulb } from 'lucide-react';
 
 export default function DrawingHeightControl() {
   const drawingMode = useSolarStore((state) => state.drawingMode);
@@ -47,7 +48,7 @@ export default function DrawingHeightControl() {
     <div className="absolute top-6 left-6 bg-gray-900 bg-opacity-95 p-4 rounded-lg border border-gray-600 w-72 backdrop-blur-sm shadow-xl z-30">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <i className="fas fa-cube text-yellow-400"></i>
+          <Box className="w-5 h-5 text-yellow-400" />
           <span className="text-sm font-bold text-gray-300 uppercase truncate max-w-[200px]">{title}</span>
         </div>
       </div>
@@ -85,8 +86,8 @@ export default function DrawingHeightControl() {
                 key={h}
                 onClick={() => handleHeightChange(h)}
                 className={`py-1 rounded text-[10px] font-bold transition ${Math.abs(localHeight - h) < 0.1
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                   }`}
               >
                 {h}m
@@ -96,9 +97,10 @@ export default function DrawingHeightControl() {
         </div>
 
         {/* Info Text */}
-        <div className="bg-gray-800 p-2 rounded border border-gray-700">
+        <div className="bg-gray-800 p-2 rounded border border-gray-700 flex items-start gap-2">
+          <Lightbulb className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
           <p className="text-[10px] text-gray-400">
-            💡 <span className="text-gray-300">
+            <span className="text-gray-300">
               {isEditingSelection ? "Adjusting selected object height." : "Set height before drawing."}
             </span>
             {" "}Height affects shadow casting.

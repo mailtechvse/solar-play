@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import { calculateFlows } from "../utils/powerFlow";
 import { runLiveLogic } from "../utils/logicController";
+import { Play, Pause, Square, RotateCcw, Map as MapIcon, Save, X } from 'lucide-react';
 
 export default function SimulationControls() {
     const sunTime = useSolarStore((state) => state.sunTime);
@@ -316,14 +317,14 @@ export default function SimulationControls() {
                             className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-700 transition-colors ${isAnimating ? 'text-yellow-400' : 'text-green-400'}`}
                             title={isAnimating ? "Pause" : "Play"}
                         >
-                            <i className={`fas fa-${isAnimating ? 'pause' : 'play'}`}></i>
+                            {isAnimating ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                         </button>
                         <button
                             onClick={handleStop}
                             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-700 text-red-400 transition-colors"
                             title="Stop & Report"
                         >
-                            <i className="fas fa-stop"></i>
+                            <Square className="w-5 h-5" />
                         </button>
                         <button
                             onClick={() => {
@@ -340,7 +341,7 @@ export default function SimulationControls() {
                             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-700 text-slate-400 transition-colors"
                             title="Reset"
                         >
-                            <i className="fas fa-undo"></i>
+                            <RotateCcw className="w-5 h-5" />
                         </button>
                     </div>
                 </div >
@@ -441,7 +442,7 @@ export default function SimulationControls() {
                             onClick={() => setMapSetupOpen(true)}
                             className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded transition flex items-center gap-1"
                         >
-                            <i className="fas fa-map"></i>
+                            <MapIcon className="w-3 h-3" />
                             {mapSettings.mapOverlayActive ? "Configure" : "Setup"}
                         </button>
                     </div>
@@ -449,7 +450,7 @@ export default function SimulationControls() {
                     {/* Auto-Save Indicator */}
                     <div className="flex justify-between items-center">
                         <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                            <i className="fas fa-save"></i> Auto-save ON
+                            <Save className="w-3 h-3" /> Auto-save ON
                         </span>
                         <span className="text-[10px] text-gray-600">
                             Local Storage
@@ -471,7 +472,7 @@ export default function SimulationControls() {
                                 onClick={() => setShowSummary(false)}
                                 className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
                             >
-                                <i className="fas fa-times"></i> Close Report
+                                <X className="w-5 h-5" /> Close Report
                             </button>
                         </div>
 

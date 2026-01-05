@@ -1,6 +1,21 @@
 import React, { useState } from "react";
 import { useSolarStore } from "../stores/solarStore";
 import EquipmentPalette from "./EquipmentPalette";
+import {
+  Plus,
+  X,
+  Link,
+  Link2Off,
+  MousePointer2,
+  Hand,
+  Ruler,
+  Eraser,
+  Spline,
+  Zap,
+  Leaf,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
 
 export default function LeftSidebar() {
   // Financial & Project State
@@ -174,9 +189,9 @@ export default function LeftSidebar() {
                 addExtraCostItem({ id: Math.random().toString(), label, cost });
               }
             }}
-            className="text-[9px] bg-yellow-200 hover:bg-yellow-300 px-1.5 py-0.5 rounded border border-yellow-300"
+            className="text-[9px] bg-yellow-200 hover:bg-yellow-300 px-1.5 py-0.5 rounded border border-yellow-300 flex items-center gap-1"
           >
-            <i className="fas fa-plus"></i> Add
+            <Plus className="w-3 h-3" /> Add
           </button>
         </div>
         <div className="space-y-1 max-h-20 overflow-y-auto">
@@ -185,7 +200,7 @@ export default function LeftSidebar() {
               <span className="truncate flex-1">{item.label}</span>
               <span className="font-mono mx-1">₹{item.cost}</span>
               <button onClick={() => removeExtraCostItem(item.id)} className="text-red-500 hover:text-red-700">
-                <i className="fas fa-times"></i>
+                <X className="w-3 h-3" />
               </button>
             </div>
           ))}
@@ -198,11 +213,11 @@ export default function LeftSidebar() {
         <div className="p-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Objects ({objects.length})</label>
           <div className="flex gap-1">
-            <button className="text-[9px] bg-gray-200 hover:bg-gray-300 px-1.5 py-0.5 rounded border border-gray-300" title="Group Selected">
-              <i className="fas fa-link"></i> Group
+            <button className="text-[9px] bg-gray-200 hover:bg-gray-300 px-1.5 py-0.5 rounded border border-gray-300 flex items-center gap-1" title="Group Selected">
+              <Link className="w-3 h-3" /> Group
             </button>
             <button className="text-[9px] bg-gray-200 hover:bg-gray-300 px-1.5 py-0.5 rounded border border-gray-300" title="Ungroup Selected">
-              <i className="fas fa-link-slash"></i>
+              <Link2Off className="w-3 h-3" />
             </button>
           </div>
         </div>
@@ -252,25 +267,25 @@ export default function LeftSidebar() {
                 onClick={() => setMode('select')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'select' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <i className="fas fa-arrow-pointer text-base"></i> Select
+                <MousePointer2 className="w-4 h-4" /> Select
               </button>
               <button
                 onClick={() => setMode('pan')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'pan' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <i className="fas fa-hand text-base"></i> Pan
+                <Hand className="w-4 h-4" /> Pan
               </button>
               <button
                 onClick={() => setMode('measure')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'measure' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <i className="fas fa-ruler-combined text-base text-blue-600"></i> Measure
+                <Ruler className="w-4 h-4 text-blue-600" /> Measure
               </button>
               <button
                 onClick={() => setMode('delete')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'delete' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-red-50 hover:text-red-600'}`}
               >
-                <i className="fas fa-eraser text-base"></i> Delete
+                <Eraser className="w-4 h-4" /> Delete
               </button>
             </div>
             <div className="grid grid-cols-3 gap-1 mt-1">
@@ -278,19 +293,19 @@ export default function LeftSidebar() {
                 onClick={() => setMode('wire_dc')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'wire_dc' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <i className="fas fa-bezier-curve text-base text-red-500"></i> DC Wire
+                <Spline className="w-4 h-4 text-red-500" /> DC Wire
               </button>
               <button
                 onClick={() => setMode('wire_ac')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'wire_ac' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <i className="fas fa-bolt text-base text-yellow-500"></i> AC Wire
+                <Zap className="w-4 h-4 text-yellow-500" /> AC Wire
               </button>
               <button
                 onClick={() => setMode('earthing')}
                 className={`p-2 rounded border flex flex-col items-center gap-1 text-[10px] font-medium transition ${mode === 'earthing' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <i className="fas fa-leaf text-base text-green-600"></i> Earthing
+                <Leaf className="w-4 h-4 text-green-600" /> Earthing
               </button>
             </div>
           </div>
@@ -302,11 +317,11 @@ export default function LeftSidebar() {
               onClick={() => toggleSection('pvModules')}
             >
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                <i className={`fas fa-chevron-${sections.pvModules ? 'down' : 'right'} text-xs`}></i>
+                {sections.pvModules ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 PV Modules
               </span>
-              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200">
-                <i className="fas fa-plus"></i>
+              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200 flex items-center gap-1">
+                <Plus className="w-3 h-3" />
               </button>
             </div>
             {sections.pvModules && (
@@ -326,11 +341,11 @@ export default function LeftSidebar() {
               onClick={() => toggleSection('inverters')}
             >
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                <i className={`fas fa-chevron-${sections.inverters ? 'down' : 'right'} text-xs`}></i>
+                {sections.inverters ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 Inverters
               </span>
-              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200">
-                <i className="fas fa-plus"></i>
+              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200 flex items-center gap-1">
+                <Plus className="w-3 h-3" />
               </button>
             </div>
             {sections.inverters && (
@@ -350,11 +365,11 @@ export default function LeftSidebar() {
               onClick={() => toggleSection('batteries')}
             >
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                <i className={`fas fa-chevron-${sections.batteries ? 'down' : 'right'} text-xs`}></i>
+                {sections.batteries ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 Batteries
               </span>
-              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200">
-                <i className="fas fa-plus"></i>
+              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200 flex items-center gap-1">
+                <Plus className="w-3 h-3" />
               </button>
             </div>
             {sections.batteries && (
@@ -374,11 +389,11 @@ export default function LeftSidebar() {
               onClick={() => toggleSection('grid')}
             >
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                <i className={`fas fa-chevron-${sections.grid ? 'down' : 'right'} text-xs`}></i>
+                {sections.grid ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 Grid & Distribution
               </span>
-              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200">
-                <i className="fas fa-plus"></i>
+              <button onClick={(e) => { e.stopPropagation(); setCustomComponentOpen(true); }} className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-200 flex items-center gap-1">
+                <Plus className="w-3 h-3" />
               </button>
             </div>
             {sections.grid && (
@@ -475,7 +490,7 @@ export default function LeftSidebar() {
               onClick={() => toggleSection('structures')}
             >
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                <i className={`fas fa-chevron-${sections.structures ? 'down' : 'right'} text-xs`}></i>
+                {sections.structures ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 Structures & Buildings
               </span>
             </div>

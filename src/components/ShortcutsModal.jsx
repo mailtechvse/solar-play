@@ -1,4 +1,5 @@
 import React from 'react';
+import { Keyboard, X } from 'lucide-react';
 
 export default function ShortcutsModal({ isOpen, onClose }) {
     if (!isOpen) return null;
@@ -23,10 +24,10 @@ export default function ShortcutsModal({ isOpen, onClose }) {
             <div className="bg-white rounded-lg shadow-2xl w-96 max-w-full overflow-hidden animate-scale-in" onClick={e => e.stopPropagation()}>
                 <div className="bg-gray-100 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
                     <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                        <i className="fas fa-keyboard"></i> Keyboard Shortcuts
+                        <Keyboard className="w-5 h-5" /> Keyboard Shortcuts
                     </h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                        <i className="fas fa-times"></i>
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
                 <div className="p-4 max-h-[70vh] overflow-y-auto">
